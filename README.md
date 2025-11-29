@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Stellar Security Wallet MVP
 
 A Security-First Wallet MVP built for the Stellar Hackathon using Next.js 14+, TypeScript, and the `@stellar/wallet-sdk`.
@@ -20,19 +21,33 @@ A Security-First Wallet MVP built for the Stellar Hackathon using Next.js 14+, T
 ## Installation
 
 1. Install dependencies:
+=======
+# Stellar Wallet
+
+A Next.js 14 application for managing Stellar blockchain wallets.
+
+## Getting Started
+
+First, install the dependencies:
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b
 
 ```bash
 npm install
 ```
 
+<<<<<<< HEAD
 ## Development
 
 Run the development server:
+=======
+Then, run the development server:
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b
 
 ```bash
 npm run dev
 ```
 
+<<<<<<< HEAD
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Project Structure
@@ -86,4 +101,21 @@ React Context providing wallet state and operations to all components.
 ## License
 
 MIT
+=======
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Project Structure
+
+- `app/` - Next.js App Router pages and layouts
+- `app/onboarding/` - Onboarding page with wallet creation/import options
+
+## Technologies
+
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Stellar SDK
+- Zustand (State Management)
+- Lucide React (Icons)
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b
 

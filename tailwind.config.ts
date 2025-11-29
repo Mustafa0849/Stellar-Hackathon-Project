@@ -6,11 +6,16 @@ const config: Config = {
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+<<<<<<< HEAD
+=======
+  darkMode: "class",
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b
   theme: {
     extend: {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+<<<<<<< HEAD
         'midnight': '#0a0a0a',
         'slate-deep': '#0f172a',
         'teal-electric': '#2dd4bf',
@@ -42,6 +47,8 @@ const config: Config = {
           '0%': { boxShadow: '0 0 5px rgba(45, 212, 191, 0.3)' },
           '100%': { boxShadow: '0 0 20px rgba(45, 212, 191, 0.6)' },
         },
+=======
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b
       },
     },
   },

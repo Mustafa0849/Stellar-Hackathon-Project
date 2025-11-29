@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 'use client';
 
 import { useWallet } from '@/context/WalletContext';
@@ -247,3 +248,11 @@ export default function Home() {
     </DashboardLayout>
   );
 }
+=======
+import { redirect } from "next/navigation";
+
+export default function Home() {
+  redirect("/onboarding");
+}
+
+>>>>>>> 8af063860f0d2dadd53e73ed7d1705cd4787b45b

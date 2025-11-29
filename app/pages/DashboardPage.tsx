@@ -102,7 +102,7 @@ export default function DashboardPage() {
     if (publicKey && !isLoading) {
       fetchAccountData(publicKey);
     }
-  }, [publicKey, router, fetchAccountData, isLoading]);
+  }, [publicKey, navigate, fetchAccountData, isLoading]);
 
   // Fetch XLM price from CoinGecko
   useEffect(() => {

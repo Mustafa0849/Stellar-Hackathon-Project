@@ -2,30 +2,25 @@
 
 import { useState } from "react";
 import { useNavigate } from 'react-router-dom';
-import { importWallet, getKeypairFromMnemonic, isValidPublicKey } from "@/lib/stellar";
+import { importWallet, getKeypairFromMnemonic } from "@/lib/stellar";
 import { useWalletStore } from "@/store/walletStore";
-import { ArrowLeft, Eye, EyeOff, Key, Eye as EyeIcon } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Key, FileText } from "lucide-react";
 
-type ImportMode = "full" | "watch";
+type ImportMode = "mnemonic" | "privateKey";
 
 export default function ImportWalletPage() {
   const navigate = useNavigate();
   const setWallet = useWalletStore((state) => state.setWallet);
 
-  const [mode, setMode] = useState<ImportMode>("full");
+  const [mode, setMode] = useState<ImportMode>("mnemonic");
   const [input, setInput] = useState("");
   const [showInput, setShowInput] = useState(false);
-  const [isMnemonic, setIsMnemonic] = useState(true); // Default to mnemonic (only for full mode)
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleImport = async () => {
     if (!input.trim()) {
-      if (mode === "watch") {
-        setError("Please enter a Stellar public address");
-      } else {
-        setError(`Please enter your ${isMnemonic ? "recovery phrase" : "secret key"}`);
-      }
+      setError(`Please enter your ${mode === "mnemonic" ? "recovery phrase" : "private key"}`);
       return;
     }
 
@@ -33,40 +28,38 @@ export default function ImportWalletPage() {
     setError(null);
 
     try {
-      if (mode === "watch") {
-        // Watch Address (Read-Only Mode)
-        const publicKey = input.trim();
+      if (mode === "mnemonic") {
+        // Import from mnemonic (12 or 24 words)
+        const trimmedInput = input.trim();
         
-        if (!isValidPublicKey(publicKey)) {
-          throw new Error("Invalid Stellar public address. Addresses must start with 'G' and be 56 characters long.");
+        // Basic validation: check if it looks like a mnemonic (has spaces)
+        const wordCount = trimmedInput.split(/\s+/).filter(w => w.length > 0).length;
+        if (wordCount !== 12 && wordCount !== 24) {
+          throw new Error("Recovery phrase must be 12 or 24 words");
         }
-
-        // Set wallet in read-only mode (no secret key)
-        setWallet(publicKey, null, undefined, true);
         
-        // Clear input for security
-        setInput("");
-        
-        // Redirect directly to dashboard (no password needed for read-only)
-        navigate("/dashboard");
+        // Import from mnemonic
+        const { publicKey, secretKey } = getKeypairFromMnemonic(trimmedInput);
+        setWallet(publicKey, secretKey, trimmedInput, false);
       } else {
-        // Full Access Mode (Recovery Phrase / Private Key)
-        if (isMnemonic) {
-          // Import from mnemonic
-          const { publicKey, secretKey } = getKeypairFromMnemonic(input.trim());
-          setWallet(publicKey, secretKey, input.trim(), false);
-        } else {
-          // Import from secret key
-          const wallet = importWallet(input.trim());
-          setWallet(wallet.publicKey, wallet.secretKey, undefined, false);
+        // Import from private key (Secret Key)
+        const trimmedInput = input.trim();
+        
+        // Validate secret key format (starts with 'S', 56 chars)
+        if (!trimmedInput.startsWith("S") || trimmedInput.length !== 56) {
+          throw new Error("Invalid private key format. Stellar secret keys must start with 'S' and be 56 characters long.");
         }
         
-        // Clear input for security
-        setInput("");
-        
-        // Redirect to create password page
-        navigate("/create-password");
+        // Import from secret key
+        const wallet = importWallet(trimmedInput);
+        setWallet(wallet.publicKey, wallet.secretKey, undefined, false);
       }
+      
+      // Clear input for security
+      setInput("");
+      
+      // Redirect to create password page
+      navigate("/create-password");
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to import wallet";
@@ -100,177 +93,120 @@ export default function ImportWalletPage() {
             Choose how you want to import your wallet
           </p>
 
-          {/* Mode Tabs */}
+          {/* Mode Selection Buttons */}
           <div className="mb-6 flex space-x-4">
             <button
               onClick={() => {
-                setMode("full");
+                setMode("mnemonic");
                 setInput("");
                 setError(null);
+                setShowInput(false);
               }}
               className={`flex-1 px-4 py-3 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
-                mode === "full"
+                mode === "mnemonic"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              }`}
+            >
+              <FileText className="w-5 h-5" />
+              <span>Recovery Phrase</span>
+            </button>
+            <button
+              onClick={() => {
+                setMode("privateKey");
+                setInput("");
+                setError(null);
+                setShowInput(false);
+              }}
+              className={`flex-1 px-4 py-3 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
+                mode === "privateKey"
                   ? "bg-blue-600 text-white"
                   : "bg-slate-800 text-slate-400 hover:bg-slate-700"
               }`}
             >
               <Key className="w-5 h-5" />
-              <span>Import Recovery Phrase / Private Key</span>
-            </button>
-            <button
-              onClick={() => {
-                setMode("watch");
-                setInput("");
-                setError(null);
-              }}
-              className={`flex-1 px-4 py-3 rounded-lg transition-colors flex items-center justify-center space-x-2 ${
-                mode === "watch"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-              }`}
-            >
-              <EyeIcon className="w-5 h-5" />
-              <span>Watch Address (Read-Only)</span>
+              <span>Private Key</span>
             </button>
           </div>
 
-          {mode === "watch" ? (
-            // Watch Address Mode
-            <div className="space-y-6">
-              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-                <p className="text-sm text-blue-200">
-                  <strong className="font-semibold">Read-Only Mode:</strong> You can view balances
-                  and transactions, but cannot send funds or sign transactions.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-300 mb-2">
-                  Stellar Public Address
-                </label>
-                <input
-                  type="text"
-                  value={input}
-                  onChange={handleInputChange}
-                  placeholder="GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
-                  autoComplete="off"
-                />
-                {error && (
-                  <p className="mt-2 text-sm text-red-400">{error}</p>
-                )}
-              </div>
-
-              <button
-                onClick={handleImport}
-                disabled={isLoading || !input.trim()}
-                className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-500 text-white font-semibold rounded-lg transition-colors duration-200 shadow-lg"
-              >
-                {isLoading ? "Importing..." : "Watch Address"}
-              </button>
-            </div>
-          ) : (
-            // Full Access Mode
-            <div className="space-y-6">
-              {/* Toggle between Mnemonic and Secret Key */}
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => {
-                    setIsMnemonic(true);
-                    setInput("");
-                    setError(null);
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                    isMnemonic
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                  }`}
-                >
-                  Recovery Phrase
-                </button>
-                <button
-                  onClick={() => {
-                    setIsMnemonic(false);
-                    setInput("");
-                    setError(null);
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                    !isMnemonic
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                  }`}
-                >
-                  Private Key
-                </button>
-              </div>
-
-              {/* Input Field */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-300 mb-2">
-                  {isMnemonic ? "Recovery Phrase (24 words)" : "Private Key (Secret Key)"}
-                </label>
-                <div className="relative">
-                  {isMnemonic ? (
-                    <textarea
+          {/* Import Form */}
+          <div className="space-y-6">
+            {/* Input Field */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-300 mb-2">
+                {mode === "mnemonic" 
+                  ? "Recovery Phrase (12 or 24 words)" 
+                  : "Private Key (Stellar Secret Key)"}
+              </label>
+              <div className="relative">
+                {mode === "mnemonic" ? (
+                  <textarea
+                    value={input}
+                    onChange={handleInputChange}
+                    placeholder="Enter your 12 or 24-word recovery phrase"
+                    rows={4}
+                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    autoComplete="off"
+                  />
+                ) : (
+                  <>
+                    <input
+                      type={showInput ? "text" : "password"}
                       value={input}
                       onChange={handleInputChange}
-                      placeholder="word1 word2 word3 ... word24"
-                      rows={4}
-                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      placeholder="Paste your Stellar Secret Key (starts with &apos;S&apos;)"
+                      className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
                       autoComplete="off"
                     />
-                  ) : (
-                    <>
-                      <input
-                        type={showInput ? "text" : "password"}
-                        value={input}
-                        onChange={handleInputChange}
-                        placeholder="SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
-                        autoComplete="off"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowInput(!showInput)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-200 transition-colors"
-                        title={showInput ? "Hide" : "Show"}
-                      >
-                        {showInput ? (
-                          <EyeOff className="w-5 h-5" />
-                        ) : (
-                          <Eye className="w-5 h-5" />
-                        )}
-                      </button>
-                    </>
-                  )}
-                </div>
-                {error && (
-                  <p className="mt-2 text-sm text-red-400">{error}</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowInput(!showInput)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-200 transition-colors"
+                      title={showInput ? "Hide" : "Show"}
+                    >
+                      {showInput ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
-
-              {/* Import Button */}
-              <button
-                onClick={handleImport}
-                disabled={isLoading || !input.trim()}
-                className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-500 text-white font-semibold rounded-lg transition-colors duration-200 shadow-lg"
-              >
-                {isLoading ? "Importing..." : "Import Account"}
-              </button>
+              {error && (
+                <p className="mt-2 text-sm text-red-400">{error}</p>
+              )}
+              {mode === "mnemonic" && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Enter your recovery phrase with spaces between words
+                </p>
+              )}
+              {mode === "privateKey" && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Your secret key starts with &apos;S&apos; and is 56 characters long
+                </p>
+              )}
             </div>
-          )}
+
+            {/* Import Button */}
+            <button
+              onClick={handleImport}
+              disabled={isLoading || !input.trim()}
+              className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed disabled:text-slate-500 text-white font-semibold rounded-lg transition-colors duration-200 shadow-lg"
+            >
+              {isLoading ? "Importing..." : "Import Account"}
+            </button>
+          </div>
         </div>
 
         {/* Security Notice */}
-        {mode === "full" && (
-          <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-            <p className="text-sm text-blue-200">
-              <strong className="font-semibold">Security:</strong> Your secret key
-              is processed locally and never sent to any server. Make sure you&apos;re
-              on a secure device before entering your secret key.
-            </p>
-          </div>
-        )}
+        <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+          <p className="text-sm text-blue-200">
+            <strong className="font-semibold">Security:</strong> Your {mode === "mnemonic" ? "recovery phrase" : "private key"}
+            is processed locally and never sent to any server. Make sure you&apos;re
+            on a secure device before entering your {mode === "mnemonic" ? "recovery phrase" : "private key"}.
+          </p>
+        </div>
       </div>
     </div>
   );

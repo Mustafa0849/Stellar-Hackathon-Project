@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
-import "./globals.css";
+"use client";
 
-export const metadata: Metadata = {
-  title: {
-    template: "%s | Nova Wallet",
-    default: "Nova Wallet - Stellar Crypto Wallet",
-  },
-  description: "Experience the speed of Stellar with Nova Wallet. Secure, modern, and fast.",
-};
+import "./globals.css";
 
 export default function RootLayout({
   children,
@@ -16,9 +9,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-background text-foreground">
-        <div className="flex min-h-screen items-center justify-center p-4">
-          <div className="w-full max-w-md">{children}</div>
+      <head>
+        <title>Nova Wallet - Stellar Crypto Wallet</title>
+        <meta name="description" content="Experience the speed of Stellar with Nova Wallet. Secure, modern, and fast." />
+      </head>
+      <body className="bg-background text-foreground" style={{ width: '360px', height: '600px', overflow: 'hidden', margin: 0, padding: 0 }}>
+        <div className="w-full h-full overflow-auto">
+          {children}
         </div>
       </body>
     </html>

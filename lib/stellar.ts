@@ -7,7 +7,9 @@ import * as bip39 from "bip39";
 const HORIZON_TESTNET_URL = "https://horizon-testnet.stellar.org";
 
 // Access Server constructor - handle different export patterns
-const ServerConstructor = (Stellar as any).Horizon?.Server || (Stellar as any).Server || Stellar.Server;
+// @ts-ignore - Stellar SDK has varying export patterns across versions
+const ServerConstructor = (Stellar as any).Horizon?.Server || (Stellar as any).Server || (Stellar as any).default?.Server;
+// @ts-ignore
 export const server = new ServerConstructor(HORIZON_TESTNET_URL);
 export const networkPassphrase = Stellar.Networks.TESTNET;
 
@@ -128,6 +130,25 @@ export function importWallet(secretKey: string): {
       throw new Error(`Failed to import wallet: ${error.message}`);
     }
     throw new Error("Invalid secret key. Please check your secret key and try again.");
+  }
+}
+
+/**
+ * Validates a Stellar public key format
+ * @param publicKey - The public key to validate (should start with 'G' and be 56 characters)
+ * @returns true if valid, false otherwise
+ */
+export function isValidPublicKey(publicKey: string): boolean {
+  try {
+    // Basic format validation
+    if (!publicKey.startsWith("G") || publicKey.length !== 56) {
+      return false;
+    }
+    // Try to create a Keypair from the public key to validate it
+    Stellar.Keypair.fromPublicKey(publicKey);
+    return true;
+  } catch {
+    return false;
   }
 }
 

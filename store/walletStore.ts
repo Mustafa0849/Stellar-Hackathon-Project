@@ -23,6 +23,7 @@ interface WalletState {
   secretKey: string | null;
   mnemonic: string | null;
   isConnected: boolean;
+  isReadOnly: boolean; // Read-only mode (watch address only)
   balances: Balance[];
   availableXLM: number;
   isLoading: boolean;
@@ -33,7 +34,7 @@ interface WalletState {
  * Wallet Store Actions
  */
 interface WalletActions {
-  setWallet: (publicKey: string, secretKey: string, mnemonic?: string) => void;
+  setWallet: (publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly?: boolean) => void;
   clearWallet: () => void;
   setAccount: (publicKey: string, balances: Balance[]) => void;
   clearAccount: () => void;
@@ -57,17 +58,17 @@ type WalletStore = WalletState & WalletActions;
  */
 function calculateAvailableXLM(account: Account): number {
   const totalXLM = parseFloat(
-    account.balances.find((b) => b.asset_type === "native")?.balance || "0"
+    (account as any).balances?.find((b: any) => b.asset_type === "native")?.balance || "0"
   );
 
   // Calculate subentry count
   // Base reserve: 2 (account + master signer)
   // Additional signers (excluding master signer)
-  const additionalSigners = Math.max(0, account.signers.length - 1);
+  const additionalSigners = Math.max(0, ((account as any).signers?.length || 1) - 1);
   
   // Trustlines (non-native balances)
-  const trustlineCount = account.balances.filter(
-    (b) => b.asset_type !== "native"
+  const trustlineCount = ((account as any).balances || []).filter(
+    (b: any) => b.asset_type !== "native"
   ).length;
 
   // Data entries - try to get from account if available
@@ -104,40 +105,50 @@ export const useWalletStore = create<WalletStore>((set) => ({
   secretKey: null,
   mnemonic: null,
   isConnected: false,
+  isReadOnly: false,
   balances: [],
   availableXLM: 0,
   isLoading: false,
   error: null,
 
   // Actions
-  setWallet: (publicKey: string, secretKey: string, mnemonic?: string) => {
-    // Store in localStorage for persistence
+  setWallet: (publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly: boolean = false) => {
+    // Store in localStorage for persistence (only if not read-only)
     localStorage.setItem("stellar_publicKey", publicKey);
-    localStorage.setItem("stellar_secretKey", secretKey);
-    if (mnemonic) {
+    if (secretKey && !isReadOnly) {
+      localStorage.setItem("stellar_secretKey", secretKey);
+    }
+    if (mnemonic && !isReadOnly) {
       localStorage.setItem("stellar_mnemonic", mnemonic);
     }
+    localStorage.setItem("stellar_isReadOnly", isReadOnly.toString());
     
     set({
       publicKey,
       secretKey,
       mnemonic: mnemonic || null,
       isConnected: true,
+      isReadOnly,
       error: null,
     });
   },
 
   clearWallet: () => {
-    // Clear localStorage
-    localStorage.removeItem("stellar_publicKey");
-    localStorage.removeItem("stellar_secretKey");
-    localStorage.removeItem("stellar_mnemonic");
+    // Note: We don't clear the encrypted vault here
+    // Only clear unencrypted data and in-memory state
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("stellar_publicKey");
+      localStorage.removeItem("stellar_secretKey");
+      localStorage.removeItem("stellar_mnemonic");
+      localStorage.removeItem("stellar_isReadOnly");
+    }
     
     set({
       publicKey: null,
       secretKey: null,
       mnemonic: null,
       isConnected: false,
+      isReadOnly: false,
       balances: [],
       availableXLM: 0,
       error: null,
@@ -178,7 +189,7 @@ export const useWalletStore = create<WalletStore>((set) => ({
       const account = await loadAccountDetails(publicKey);
 
       // Extract balances from account
-      const balances: Balance[] = account.balances.map((balance) => ({
+      const balances: Balance[] = ((account as any).balances || []).map((balance: any) => ({
         asset_type: balance.asset_type,
         balance: balance.balance,
         asset_code: "asset_code" in balance ? balance.asset_code : undefined,

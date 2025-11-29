@@ -1,22 +1,22 @@
 "use client";
 
 import { Wallet, Download } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from 'react-router-dom';
 
 export default function OnboardingPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const handleCreateWallet = () => {
-    router.push("/create");
+    navigate("/create");
   };
 
   const handleImportWallet = () => {
-    router.push("/import");
+    navigate("/import");
   };
 
   return (
-    <div className="flex flex-col items-center justify-center space-y-6 p-8">
-      <h1 className="text-3xl font-bold text-center mb-8">
+    <div className="flex flex-col items-center justify-center space-y-6 p-6 h-full w-full overflow-auto">
+      <h1 className="text-2xl font-bold text-center mb-6">
         Welcome to Nova Wallet
       </h1>
       

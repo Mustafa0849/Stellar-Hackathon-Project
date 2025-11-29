@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from "@/store/walletStore";
 import { sendPayment, fetchRecentTransactions, type TransactionHistoryItem } from "@/lib/stellar";
+import { hasEncryptedVault, clearEncryptedVault } from "@/lib/encryption";
 import QRCode from "react-qr-code";
 import SettingsDialog from "@/components/SettingsDialog";
 import {
@@ -35,7 +36,7 @@ import {
 type Tab = "assets" | "activity";
 
 export default function DashboardPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const {
     publicKey,
     secretKey,
@@ -43,6 +44,7 @@ export default function DashboardPage() {
     availableXLM,
     isLoading,
     error,
+    isReadOnly,
     fetchAccountData,
     setError,
   } = useWalletStore();
@@ -68,18 +70,36 @@ export default function DashboardPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(4); // WhatsApp-style notification count
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Simple session check - redirect if no public key
   useEffect(() => {
-    const storedPublicKey = localStorage.getItem("stellar_publicKey");
-    if (!storedPublicKey && !publicKey) {
-      router.push("/onboarding");
-      return;
+    // If no public key in store, check if we need to redirect to login
+    if (!publicKey) {
+      // Check for read-only wallet in localStorage
+      const storedPublicKey = localStorage.getItem("stellar_publicKey");
+      const storedIsReadOnly = localStorage.getItem("stellar_isReadOnly") === "true";
+      
+      if (storedPublicKey && storedIsReadOnly) {
+        // Restore read-only wallet
+        const setWallet = useWalletStore.getState().setWallet;
+        setWallet(storedPublicKey, null, undefined, true);
+        return;
+      }
+      
+      if (hasEncryptedVault()) {
+        // Encrypted vault exists but wallet not unlocked - redirect to login
+        navigate("/login");
+        return;
+      } else {
+        // No vault, redirect to landing page
+        navigate("/");
+        return;
+      }
     }
 
-    if (storedPublicKey && !publicKey && !isLoading) {
-      fetchAccountData(storedPublicKey);
-    } else if (publicKey && !isLoading) {
+    // If we have a public key, fetch account data
+    if (publicKey && !isLoading) {
       fetchAccountData(publicKey);
     }
   }, [publicKey, router, fetchAccountData, isLoading]);
@@ -110,6 +130,7 @@ export default function DashboardPage() {
     if (activeTab === "activity" && publicKey && !loadingTransactions) {
       loadTransactions();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, publicKey]);
 
   const loadTransactions = async () => {
@@ -140,10 +161,32 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLockWallet = () => {
     const { clearWallet } = useWalletStore.getState();
     clearWallet();
-    router.push("/onboarding");
+    // Redirect to landing page (encrypted vault still exists)
+    navigate("/");
+  };
+
+  const handleLogout = () => {
+    // Show confirmation modal
+    setShowLogoutConfirm(true);
+    setSidebarOpen(false);
+  };
+
+  const handleConfirmLogout = () => {
+    // Clear encrypted vault
+    clearEncryptedVault();
+    
+    // Clear wallet store
+    const { clearWallet } = useWalletStore.getState();
+    clearWallet();
+    
+    // Close modal
+    setShowLogoutConfirm(false);
+    
+    // Redirect to landing page
+    navigate("/");
   };
 
   const truncateAddress = (address: string) => {
@@ -228,8 +271,8 @@ export default function DashboardPage() {
   const totalXLM = parseFloat(xlmBalance?.balance || "0");
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="max-w-2xl mx-auto">
+    <div className="w-full h-full bg-slate-950 overflow-auto">
+      <div className="w-full">
         {/* Header Section */}
         <div className="bg-slate-900 border-b border-slate-800 p-6">
           {/* App Bar: Menu Icon | Account Name | Network Badge */}
@@ -281,13 +324,30 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {/* Read-Only Notice */}
+          {isReadOnly && (
+            <div className="mb-4 bg-yellow-900/20 border border-yellow-800 rounded-lg p-3">
+              <p className="text-sm text-yellow-200 text-center">
+                <strong className="font-semibold">Read-Only Mode:</strong> You can view balances and transactions, but cannot send funds.
+              </p>
+            </div>
+          )}
+
           {/* Action Bar */}
           <div className="flex items-center justify-center space-x-8 mb-6">
             <button
               onClick={() => setShowSend(true)}
-              className="flex flex-col items-center space-y-2 group"
+              disabled={isReadOnly}
+              className={`flex flex-col items-center space-y-2 group ${
+                isReadOnly ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              title={isReadOnly ? "Send is disabled in read-only mode" : "Send XLM"}
             >
-              <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center group-hover:bg-blue-500 transition-colors">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                isReadOnly 
+                  ? "bg-slate-700" 
+                  : "bg-blue-600 group-hover:bg-blue-500"
+              }`}>
                 <ArrowUp className="w-6 h-6 text-white" />
               </div>
               <span className="text-sm text-slate-300">Send</span>
@@ -615,7 +675,7 @@ export default function DashboardPage() {
 
               <button
                 onClick={handleSend}
-                disabled={sending || !sendDestination || !sendAmount || !secretKey}
+                disabled={sending || !sendDestination || !sendAmount || !secretKey || isReadOnly}
                 className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
               >
                 {sending ? "Sending..." : "Send Transaction"}
@@ -714,10 +774,17 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Footer - Lock Wallet */}
-            <div className="p-4 border-t border-slate-800">
+            {/* Footer - Logout and Lock */}
+            <div className="p-4 border-t border-slate-800 space-y-2">
               <button
                 onClick={handleLogout}
+                className="w-full flex items-center space-x-3 px-4 py-3 text-red-400 hover:bg-red-900/20 hover:text-red-300 rounded-lg transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Logout / Reset Wallet</span>
+              </button>
+              <button
+                onClick={handleLockWallet}
                 className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-slate-800 rounded-lg transition-colors"
               >
                 <Lock className="w-5 h-5" />
@@ -1052,6 +1119,55 @@ export default function DashboardPage() {
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
       />
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div
+            className="bg-slate-900 rounded-2xl border border-slate-800 w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-12 h-12 bg-red-900/30 rounded-full flex items-center justify-center">
+                <LogOut className="w-6 h-6 text-red-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-white">Logout / Reset Wallet</h2>
+            </div>
+
+            <div className="mb-6">
+              <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-4">
+                <p className="text-sm text-red-200 font-semibold mb-2">
+                  ⚠️ Warning: This action cannot be undone
+                </p>
+                <p className="text-sm text-red-200">
+                  Are you sure you want to logout? This will remove the wallet from this browser.
+                  Make sure you have your recovery phrase backed up, as you will need it to restore
+                  your wallet.
+                </p>
+              </div>
+              <p className="text-sm text-slate-400">
+                This will permanently delete the encrypted wallet data from this device. You will
+                need to import your wallet again using your recovery phrase or secret key.
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors"
+              >
+                Yes, Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

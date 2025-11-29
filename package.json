@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/build-extension.js",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "generate-icons": "node scripts/generate-icons.js"
   },
   "overrides": {
     "glob": "^10.4.6"
@@ -14,12 +15,14 @@
   "dependencies": {
     "@stellar/wallet-sdk": "*",
     "@types/bip39": "^2.4.2",
+    "@types/react-router-dom": "^5.3.3",
     "bip39": "^3.1.0",
     "lucide-react": "^0.344.0",
     "next": "14.2.33",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-qr-code": "^2.0.18",
+    "react-router-dom": "^7.9.6",
     "stellar-sdk": "^11.2.2",
     "zustand": "^4.5.0"
   },
@@ -31,6 +34,7 @@
     "eslint": "^8.56.0",
     "eslint-config-next": "14.2.33",
     "postcss": "^8.4.33",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"
   }

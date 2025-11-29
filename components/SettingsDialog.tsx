@@ -212,7 +212,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                         </p>
                         <p className="text-sm text-red-200">
                           Are you sure? Anyone with this key can steal your funds.
-                          Make sure you're in a private location and no one can see
+                          Make sure you&apos;re in a private location and no one can see
                           your screen.
                         </p>
                       </div>

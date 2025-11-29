@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from 'react-router-dom';
 import { generateMnemonic, getKeypairFromMnemonic } from "@/lib/stellar";
 import { useWalletStore } from "@/store/walletStore";
 import { ArrowLeft, Copy, Check, ArrowRight } from "lucide-react";
@@ -9,7 +9,7 @@ import { ArrowLeft, Copy, Check, ArrowRight } from "lucide-react";
 type Phase = "display" | "verify";
 
 export default function CreateWalletPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const setWallet = useWalletStore((state) => state.setWallet);
   
   const [phase, setPhase] = useState<Phase>("display");
@@ -107,8 +107,9 @@ export default function CreateWalletPage() {
     // Verification passed - create wallet and redirect
     try {
       const { publicKey, secretKey } = getKeypairFromMnemonic(mnemonic);
-      setWallet(publicKey, secretKey, mnemonic);
-      router.push("/dashboard");
+      setWallet(publicKey, secretKey, mnemonic, false);
+      // Redirect to create password page instead of dashboard
+      navigate("/create-password");
     } catch (error) {
       console.error("Failed to create wallet:", error);
       setVerificationError("Failed to create wallet. Please try again.");
@@ -118,10 +119,10 @@ export default function CreateWalletPage() {
   // Display Phase
   if (phase === "display") {
     return (
-      <div className="min-h-screen bg-slate-950 p-4">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <div className="w-full h-full bg-slate-950 p-4 overflow-auto">
+        <div className="w-full space-y-6">
           <button
-            onClick={() => router.back()}
+            onClick={() => navigate(-1)}
             className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -210,8 +211,8 @@ export default function CreateWalletPage() {
 
   // Verification Phase
   return (
-    <div className="min-h-screen bg-slate-950 p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="w-full h-full bg-slate-950 p-4 overflow-auto">
+      <div className="w-full space-y-6">
         <button
           onClick={handleBackToDisplay}
           className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"

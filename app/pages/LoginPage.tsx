@@ -31,7 +31,7 @@ export default function LoginPage() {
         setIsChecking(false);
       }
     }
-  }, [router]);
+  }, [navigate]);
 
   // Don't render if no vault exists (redirect will happen)
   if (isChecking || (typeof window !== "undefined" && !hasEncryptedVault())) {

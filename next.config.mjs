@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  // output: 'export', // Commented out for dev server - uncomment for production build
   trailingSlash: true,
   reactStrictMode: true,
   images: {

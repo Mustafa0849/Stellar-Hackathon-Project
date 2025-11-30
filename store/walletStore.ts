@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { loadAccountDetails } from "@/lib/stellar";
+import { walletAPI, type BalanceResponse } from "@/lib/api";
 import type { Account } from "stellar-sdk";
 import type { Vault, Account as VaultAccount } from "@/lib/vault";
 import { addAccountToVault, getActiveAccount } from "@/lib/vault";
@@ -205,35 +206,75 @@ export const useWalletStore = create<WalletStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const account = await loadAccountDetails(publicKey);
+      // Try backend API first
+      try {
+        const balanceData = await walletAPI.getBalance(publicKey);
+        
+        // Convert backend response to frontend format
+        const balances: Balance[] = balanceData.assets.map((asset) => {
+          // Determine asset type
+          const assetType = asset.symbol === "XLM" ? "native" : "credit_alphanum4";
+          
+          return {
+            asset_type: assetType,
+            balance: asset.balance,
+            asset_code: asset.symbol === "XLM" ? undefined : asset.symbol,
+            asset_issuer: asset.contract || undefined,
+            limit: undefined,
+            buying_liabilities: undefined,
+            selling_liabilities: undefined,
+          };
+        });
 
-      // Extract balances from account
-      const balances: Balance[] = ((account as any).balances || []).map((balance: any) => ({
-        asset_type: balance.asset_type,
-        balance: balance.balance,
-        asset_code: "asset_code" in balance ? balance.asset_code : undefined,
-        asset_issuer: "asset_issuer" in balance ? balance.asset_issuer : undefined,
-        limit: "limit" in balance ? balance.limit : undefined,
-        buying_liabilities:
-          "buying_liabilities" in balance
-            ? balance.buying_liabilities
-            : undefined,
-        selling_liabilities:
-          "selling_liabilities" in balance
-            ? balance.selling_liabilities
-            : undefined,
-      }));
+        // Calculate available XLM from backend response
+        const xlmAsset = balanceData.assets.find((a) => a.symbol === "XLM");
+        const totalXLM = parseFloat(xlmAsset?.balance || "0");
+        const availableXLM = parseFloat(xlmAsset?.available || "0");
 
-      // Calculate available XLM using the full account data
-      const availableXLM = calculateAvailableXLM(account);
+        console.log("✅ Balance fetched via backend:", balanceData);
 
-      set({
-        publicKey,
-        balances,
-        availableXLM,
-        isLoading: false,
-        error: null,
-      });
+        set({
+          publicKey,
+          balances,
+          availableXLM,
+          isLoading: false,
+          error: null,
+        });
+      } catch (backendError) {
+        // If backend fails, fallback to direct Stellar SDK
+        console.warn("⚠️ Backend API failed, using direct Stellar SDK:", backendError);
+        console.log("🔄 Falling back to direct Stellar SDK for account data...");
+        
+        const account = await loadAccountDetails(publicKey);
+
+        // Extract balances from account
+        const balances: Balance[] = ((account as any).balances || []).map((balance: any) => ({
+          asset_type: balance.asset_type,
+          balance: balance.balance,
+          asset_code: "asset_code" in balance ? balance.asset_code : undefined,
+          asset_issuer: "asset_issuer" in balance ? balance.asset_issuer : undefined,
+          limit: "limit" in balance ? balance.limit : undefined,
+          buying_liabilities:
+            "buying_liabilities" in balance
+              ? balance.buying_liabilities
+              : undefined,
+          selling_liabilities:
+            "selling_liabilities" in balance
+              ? balance.selling_liabilities
+              : undefined,
+        }));
+
+        // Calculate available XLM using the full account data
+        const availableXLM = calculateAvailableXLM(account);
+
+        set({
+          publicKey,
+          balances,
+          availableXLM,
+          isLoading: false,
+          error: null,
+        });
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error

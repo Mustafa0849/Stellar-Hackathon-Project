@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from "@/store/walletStore";
 import { sendPayment, fetchRecentTransactions, getTestnetUSDC, type TransactionHistoryItem } from "@/lib/stellar";
+import { transactionAPI, assetAPI } from "@/lib/api";
 import { hasEncryptedVault, clearEncryptedVault } from "@/lib/encryption";
 import { clearSession } from "@/lib/session";
 import QRCode from "react-qr-code";
@@ -130,34 +131,53 @@ export default function DashboardPage() {
     }
   }, [publicKey, navigate, fetchAccountData, isLoading]);
 
-  // Fetch XLM price and 24h change from CoinGecko
+  // Fetch XLM price and 24h change from Backend API or CoinGecko
   useEffect(() => {
     const fetchXlmPrice = async () => {
       try {
         setPriceError(null);
-        const response = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd&include_24hr_change=true&include_sparkline=true"
-        );
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        if (data.stellar) {
-          if (data.stellar.usd) {
-            setXlmPrice(data.stellar.usd);
-            // Cache price in localStorage as fallback
-            if (typeof window !== "undefined") {
-              localStorage.setItem("caelus_cachedXlmPrice", String(data.stellar.usd));
+        // Try backend API first
+        try {
+          const priceData = await assetAPI.getPrice("XLM");
+          setXlmPrice(parseFloat(priceData.price));
+          setXlm24hChange(priceData.change24h);
+          
+          // Cache price in localStorage as fallback
+          if (typeof window !== "undefined") {
+            localStorage.setItem("caelus_cachedXlmPrice", priceData.price);
+          }
+          
+          console.log("✅ XLM price fetched via backend:", priceData);
+        } catch (backendError) {
+          // If backend fails, fallback to CoinGecko
+          console.warn("⚠️ Backend API failed for price, using CoinGecko:", backendError);
+          console.log("🔄 Falling back to CoinGecko for price data...");
+          
+          const response = await fetch(
+            "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd&include_24hr_change=true&include_sparkline=true"
+          );
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          if (data.stellar) {
+            if (data.stellar.usd) {
+              setXlmPrice(data.stellar.usd);
+              // Cache price in localStorage as fallback
+              if (typeof window !== "undefined") {
+                localStorage.setItem("caelus_cachedXlmPrice", String(data.stellar.usd));
+              }
             }
-          }
-          if (data.stellar.usd_24h_change !== undefined) {
-            setXlm24hChange(data.stellar.usd_24h_change);
-          }
-          // Store sparkline data (7-day price history)
-          if (data.stellar.sparkline_7d && Array.isArray(data.stellar.sparkline_7d.price)) {
-            setSparklineData(data.stellar.sparkline_7d.price);
+            if (data.stellar.usd_24h_change !== undefined) {
+              setXlm24hChange(data.stellar.usd_24h_change);
+            }
+            // Store sparkline data (7-day price history)
+            if (data.stellar.sparkline_7d && Array.isArray(data.stellar.sparkline_7d.price)) {
+              setSparklineData(data.stellar.sparkline_7d.price);
+            }
           }
         }
       } catch (error) {
@@ -192,8 +212,42 @@ export default function DashboardPage() {
     if (!publicKey) return;
     setLoadingTransactions(true);
     try {
-      const txns = await fetchRecentTransactions(publicKey);
-      setTransactions(txns);
+      // Try backend API first
+      try {
+        const backendTxns = await transactionAPI.getHistory(publicKey, 20);
+        
+        // Convert backend response to frontend format
+        const convertedTxns: TransactionHistoryItem[] = backendTxns.map((tx) => ({
+          id: tx.id,
+          type: tx.type === "send" ? "payment" : tx.type === "receive" ? "payment" : "other",
+          amount: tx.amount,
+          asset: tx.token,
+          from: tx.from,
+          to: tx.to,
+          date: new Date(tx.time),
+          hash: tx.txHash || tx.id,
+          memo: undefined,
+          fee: "0.00001", // Default fee
+          status: tx.status === "confirmed" ? "success" : tx.status === "failed" ? "failed" : "pending",
+          formattedDate: new Date(tx.time).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }));
+
+        console.log("✅ Transactions fetched via backend:", backendTxns);
+        setTransactions(convertedTxns);
+      } catch (backendError) {
+        // If backend fails, fallback to direct Stellar SDK
+        console.warn("⚠️ Backend API failed, using direct Stellar SDK:", backendError);
+        console.log("🔄 Falling back to direct Stellar SDK for transactions...");
+        
+        const txns = await fetchRecentTransactions(publicKey);
+        setTransactions(txns);
+      }
     } catch (error) {
       console.error("Failed to load transactions:", error);
     } finally {
@@ -275,21 +329,46 @@ export default function DashboardPage() {
     setUsdcSuccess(false);
 
     try {
-      await getTestnetUSDC(secretKey);
-      setUsdcSuccess(true);
-      
-      // Refresh account data to show new USDC balance
-      if (publicKey) {
-        await fetchAccountData(publicKey);
-        // Also refresh transactions to show the new transaction
-        await loadTransactions();
+      // Try backend API first
+      try {
+        const result = await assetAPI.getTestnetUSDC();
+        
+        console.log("✅ Testnet USDC received via backend:", result);
+        setUsdcSuccess(true);
+        
+        // Refresh account data to show new USDC balance
+        if (publicKey) {
+          await fetchAccountData(publicKey);
+          // Also refresh transactions to show the new transaction
+          await loadTransactions();
+        }
+        
+        // Auto-close modal after 2 seconds on success
+        setTimeout(() => {
+          setShowGetUSDC(false);
+          setUsdcSuccess(false);
+        }, 2000);
+      } catch (backendError) {
+        // If backend fails, fallback to direct Stellar SDK
+        console.warn("⚠️ Backend API failed, using direct Stellar SDK:", backendError);
+        console.log("🔄 Falling back to direct Stellar SDK for USDC...");
+        
+        await getTestnetUSDC(secretKey);
+        setUsdcSuccess(true);
+        
+        // Refresh account data to show new USDC balance
+        if (publicKey) {
+          await fetchAccountData(publicKey);
+          // Also refresh transactions to show the new transaction
+          await loadTransactions();
+        }
+        
+        // Auto-close modal after 2 seconds on success
+        setTimeout(() => {
+          setShowGetUSDC(false);
+          setUsdcSuccess(false);
+        }, 2000);
       }
-      
-      // Auto-close modal after 2 seconds on success
-      setTimeout(() => {
-        setShowGetUSDC(false);
-        setUsdcSuccess(false);
-      }, 2000);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to get testnet USDC";
       setUsdcError(errorMessage);
@@ -326,17 +405,45 @@ export default function DashboardPage() {
     setSendSuccess(false);
 
     try {
-      await sendPayment(sendDestination, sendAmount, secretKey);
-      setSendSuccess(true);
-      setSendDestination("");
-      setSendAmount("");
-      // Refresh account data and transactions
-      if (publicKey) {
-        setTimeout(async () => {
-          await fetchAccountData(publicKey);
-          await loadTransactions();
-          setSendSuccess(false);
-        }, 2000);
+      // Try backend API first
+      try {
+        const result = await transactionAPI.send({
+          to: sendDestination,
+          amount: sendAmount,
+          asset: "XLM",
+        });
+        
+        console.log("✅ Transaction sent via backend:", result);
+        setSendSuccess(true);
+        setSendDestination("");
+        setSendAmount("");
+        
+        // Refresh account data and transactions
+        if (publicKey) {
+          setTimeout(async () => {
+            await fetchAccountData(publicKey);
+            await loadTransactions();
+            setSendSuccess(false);
+          }, 2000);
+        }
+      } catch (backendError) {
+        // If backend fails, fallback to direct Stellar SDK
+        console.warn("⚠️ Backend API failed, using direct Stellar SDK:", backendError);
+        console.log("🔄 Falling back to direct Stellar SDK...");
+        
+        await sendPayment(sendDestination, sendAmount, secretKey);
+        setSendSuccess(true);
+        setSendDestination("");
+        setSendAmount("");
+        
+        // Refresh account data and transactions
+        if (publicKey) {
+          setTimeout(async () => {
+            await fetchAccountData(publicKey);
+            await loadTransactions();
+            setSendSuccess(false);
+          }, 2000);
+        }
       }
     } catch (error) {
       const errorMessage =

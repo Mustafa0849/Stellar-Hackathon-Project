@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from "@/store/walletStore";
-import { sendPayment, fetchRecentTransactions, type TransactionHistoryItem } from "@/lib/stellar";
+import { sendPayment, fetchRecentTransactions, getTestnetUSDC, type TransactionHistoryItem } from "@/lib/stellar";
 import { hasEncryptedVault, clearEncryptedVault } from "@/lib/encryption";
 import { clearSession } from "@/lib/session";
 import QRCode from "react-qr-code";
@@ -26,7 +26,6 @@ import {
   Settings,
   Eye,
   EyeOff,
-  LogOut,
   Menu,
   Bell,
   Shield,
@@ -36,6 +35,7 @@ import {
   ArrowRight,
   TrendingUp,
   TrendingDown,
+  Droplet,
 } from "lucide-react";
 
 type Tab = "assets" | "activity";
@@ -80,8 +80,11 @@ export default function DashboardPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(4); // WhatsApp-style notification count
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isAccountCopied, setIsAccountCopied] = useState(false);
+  const [showGetUSDC, setShowGetUSDC] = useState(false);
+  const [gettingUSDC, setGettingUSDC] = useState(false);
+  const [usdcError, setUsdcError] = useState<string | null>(null);
+  const [usdcSuccess, setUsdcSuccess] = useState(false);
   
   // Privacy Mode: Hide balance
   const [isBalanceHidden, setIsBalanceHidden] = useState(() => {
@@ -94,6 +97,9 @@ export default function DashboardPage() {
 
   // Simple session check - redirect if no public key
   useEffect(() => {
+    // Ensure we're in browser environment
+    if (typeof window === "undefined") return;
+
     // If no public key in store, check if we need to redirect to login
     if (!publicKey) {
       // Check for read-only wallet in localStorage
@@ -211,37 +217,17 @@ export default function DashboardPage() {
   };
 
   const handleLockWallet = async () => {
-    const { clearWallet } = useWalletStore.getState();
-    clearWallet();
-    // Clear session for security
-    await clearSession();
-    // Redirect to landing page (encrypted vault still exists)
-    navigate("/");
-  };
-
-  const handleLogout = () => {
-    // Show confirmation modal
-    setShowLogoutConfirm(true);
-    setSidebarOpen(false);
-  };
-
-  const handleConfirmLogout = async () => {
-    // Clear encrypted vault
-    clearEncryptedVault();
-    
-    // Clear session
-    await clearSession();
-    
-    // Clear wallet store
+    // Clear only the in-memory wallet state (does NOT clear encrypted vault)
     const { clearWallet } = useWalletStore.getState();
     clearWallet();
     
-    // Close modal
-    setShowLogoutConfirm(false);
+    // Clear session data (decrypted password/session tokens)
+    await clearSession();
     
-    // Redirect to landing page
-    navigate("/");
+    // Redirect to unlock/login screen (encrypted vault remains intact)
+    navigate("/login");
   };
+
 
   const toggleBalanceVisibility = () => {
     const newValue = !isBalanceHidden;
@@ -275,6 +261,41 @@ export default function DashboardPage() {
       if (activeTab === "activity") {
         loadTransactions();
       }
+    }
+  };
+
+  const handleGetTestnetUSDC = async () => {
+    if (!secretKey || isReadOnly) {
+      setUsdcError("Secret key is required to get USDC");
+      return;
+    }
+
+    setGettingUSDC(true);
+    setUsdcError(null);
+    setUsdcSuccess(false);
+
+    try {
+      await getTestnetUSDC(secretKey);
+      setUsdcSuccess(true);
+      
+      // Refresh account data to show new USDC balance
+      if (publicKey) {
+        await fetchAccountData(publicKey);
+        // Also refresh transactions to show the new transaction
+        await loadTransactions();
+      }
+      
+      // Auto-close modal after 2 seconds on success
+      setTimeout(() => {
+        setShowGetUSDC(false);
+        setUsdcSuccess(false);
+      }, 2000);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to get testnet USDC";
+      setUsdcError(errorMessage);
+      console.error("Error getting testnet USDC:", error);
+    } finally {
+      setGettingUSDC(false);
     }
   };
 
@@ -542,11 +563,22 @@ export default function DashboardPage() {
               </div>
               <span className="text-sm text-slate-300">Receive</span>
             </button>
-            <button className="flex flex-col items-center space-y-2 group opacity-50 cursor-not-allowed">
-              <div className="w-14 h-14 bg-slate-700 rounded-full flex items-center justify-center">
-                <Plus className="w-6 h-6 text-slate-400" />
+            <button
+              onClick={() => setShowGetUSDC(true)}
+              disabled={isReadOnly}
+              className={`flex flex-col items-center space-y-2 group ${
+                isReadOnly ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              title={isReadOnly ? "Add Asset is disabled in read-only mode" : "Get Testnet USDC"}
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${
+                isReadOnly 
+                  ? "bg-slate-700" 
+                  : "bg-purple-600 group-hover:bg-purple-500"
+              }`}>
+                <Droplet className="w-6 h-6 text-white" />
               </div>
-              <span className="text-sm text-slate-300">Add Asset</span>
+              <span className="text-sm text-slate-300">Get USDC</span>
             </button>
           </div>
         </div>
@@ -878,13 +910,21 @@ export default function DashboardPage() {
                 </button>
               </div>
               <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">A1</span>
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold text-lg">
+                    {vault && vault.accounts.length > 0
+                      ? vault.accounts.find((acc) => acc.index === vault.activeAccountIndex)?.name?.charAt(0) || "A"
+                      : "A"}
+                  </span>
                 </div>
-                <div>
-                  <div className="text-white font-medium">Account 1</div>
-                  <div className="text-xs text-slate-400 font-mono">
-                    {truncateAddress(publicKey)}
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="text-white font-medium truncate">
+                    {vault && vault.accounts.length > 0
+                      ? vault.accounts.find((acc) => acc.index === vault.activeAccountIndex)?.name || "Account 1"
+                      : "Account 1"}
+                  </div>
+                  <div className="text-xs text-slate-400 font-mono truncate">
+                    {truncateAddress(publicKey || "")}
                   </div>
                 </div>
               </div>
@@ -943,17 +983,8 @@ export default function DashboardPage() {
                 <Settings className="w-5 h-5" />
                 <span>Settings</span>
               </button>
-            </div>
 
-            {/* Footer - Logout and Lock */}
-            <div className="p-4 border-t border-slate-800 space-y-2">
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center space-x-3 px-4 py-3 text-red-400 hover:bg-red-900/20 hover:text-red-300 rounded-lg transition-colors"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Logout / Reset Wallet</span>
-              </button>
+              {/* Lock Wallet */}
               <button
                 onClick={handleLockWallet}
                 className="w-full flex items-center space-x-3 px-4 py-3 text-white hover:bg-slate-800 rounded-lg transition-colors"
@@ -1285,60 +1316,105 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Get Testnet USDC Modal */}
+      {showGetUSDC && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-white">Get Testnet USDC</h2>
+              <button
+                onClick={() => {
+                  setShowGetUSDC(false);
+                  setUsdcError(null);
+                  setUsdcSuccess(false);
+                }}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {usdcError && (
+                <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 text-red-200">
+                  <p className="font-semibold mb-1">Error</p>
+                  <p className="text-sm">{usdcError}</p>
+                  {usdcError.includes("Insufficient XLM") && (
+                    <p className="text-xs mt-2 text-red-300">
+                      💡 Tip: Get free XLM from Friendbot first to cover transaction fees.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {usdcSuccess && (
+                <div className="bg-green-900/50 border border-green-700 rounded-lg p-4 text-green-200">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <p className="font-semibold">Received USDC!</p>
+                  </div>
+                  <p className="text-sm mt-1">Your USDC balance will update shortly.</p>
+                </div>
+              )}
+
+              <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Droplet className="w-8 h-8 text-purple-400" />
+                  <div>
+                    <div className="text-white font-semibold">Swap XLM for USDC</div>
+                    <div className="text-xs text-slate-400">Testnet USDC Faucet</div>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm text-slate-300">
+                  <div className="flex justify-between">
+                    <span>Swap Amount:</span>
+                    <span className="text-white font-medium">10 XLM</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Expected USDC:</span>
+                    <span className="text-white font-medium">~1-2 USDC</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Network Fee:</span>
+                    <span className="text-white font-medium">~0.00001 XLM</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
+                <p className="text-xs text-blue-200">
+                  <strong>Note:</strong> This will automatically create a USDC trustline if you don&apos;t have one, then swap 10 XLM for USDC on the Stellar testnet.
+                </p>
+              </div>
+
+              <button
+                onClick={handleGetTestnetUSDC}
+                disabled={gettingUSDC || !secretKey || isReadOnly}
+                className="w-full px-6 py-4 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2"
+              >
+                {gettingUSDC ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Minting USDC...</span>
+                  </>
+                ) : (
+                  <>
+                    <Droplet className="w-5 h-5" />
+                    <span>Get Testnet USDC</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings Dialog */}
       <SettingsDialog
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
       />
 
-      {/* Logout Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-          <div
-            className="bg-slate-900 rounded-2xl border border-slate-800 w-full max-w-md p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-12 h-12 bg-red-900/30 rounded-full flex items-center justify-center">
-                <LogOut className="w-6 h-6 text-red-400" />
-              </div>
-              <h2 className="text-2xl font-bold text-white">Logout / Reset Wallet</h2>
-            </div>
-
-            <div className="mb-6">
-              <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-4">
-                <p className="text-sm text-red-200 font-semibold mb-2">
-                  ⚠️ Warning: This action cannot be undone
-                </p>
-                <p className="text-sm text-red-200">
-                  Are you sure you want to logout? This will remove the wallet from this browser.
-                  Make sure you have your recovery phrase backed up, as you will need it to restore
-                  your wallet.
-                </p>
-              </div>
-              <p className="text-sm text-slate-400">
-                This will permanently delete the encrypted wallet data from this device. You will
-                need to import your wallet again using your recovery phrase or secret key.
-              </p>
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmLogout}
-                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors"
-              >
-                Yes, Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

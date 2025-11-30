@@ -464,3 +464,162 @@ export async function sendPayment(
   }
 }
 
+/**
+ * Testnet USDC Asset Configuration
+ * Standard Stellar Testnet USDC Issuer
+ * This is the official Circle USDC issuer on Stellar Testnet
+ */
+// Define USDC Asset using the standard Testnet Issuer directly to avoid string errors
+// Correct Stellar Testnet USDC Issuer: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+const TESTNET_USDC_ASSET = new Stellar.Asset(
+  "USDC",
+  "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+);
+
+/**
+ * Check if account has a trustline for a specific asset
+ */
+async function hasTrustline(
+  publicKey: string,
+  asset: Stellar.Asset
+): Promise<boolean> {
+  try {
+    const account = await server.loadAccount(publicKey);
+    const balances = account.balances || [];
+    
+    if (asset.isNative()) {
+      return true; // Native asset always has "trustline"
+    }
+    
+    return balances.some((balance: any) => {
+      if (balance.asset_type === "native") return false;
+      return (
+        balance.asset_code === asset.getCode() &&
+        balance.asset_issuer === asset.getIssuer()
+      );
+    });
+  } catch (error) {
+    console.error("Error checking trustline:", error);
+    return false;
+  }
+}
+
+/**
+ * Get Testnet USDC by swapping XLM for USDC
+ * This function:
+ * 1. Checks if trustline exists, creates it if needed
+ * 2. Performs a path payment to swap XLM for USDC
+ * 
+ * @param secretKey - The secret key of the account
+ * @param xlmAmount - Amount of XLM to swap (default: 10 XLM)
+ * @param minUsdcAmount - Minimum USDC to receive (default: 0.1 USDC)
+ * @returns Promise that resolves with the transaction result
+ * @throws Error if the transaction fails or account has insufficient XLM
+ */
+/**
+ * Get Testnet USDC by swapping XLM for USDC
+ * This function:
+ * 1. Checks if trustline exists, creates it if needed
+ * 2. Performs a path payment to swap XLM for USDC
+ * 
+ * Note: This requires the USDC asset to have liquidity on the Testnet DEX.
+ * The standard testnet USDC issuer should have XLM/USDC liquidity pairs.
+ * 
+ * @param secretKey - The secret key of the account
+ * @param xlmAmount - Amount of XLM to swap (default: 10 XLM)
+ * @param minUsdcAmount - Minimum USDC to receive (default: 0.1 USDC)
+ * @returns Promise that resolves with the transaction result
+ * @throws Error if the transaction fails or account has insufficient XLM
+ */
+export async function getTestnetUSDC(
+  secretKey: string,
+  xlmAmount: string = "10",
+  minUsdcAmount: string = "0.1"
+): Promise<any> {
+  try {
+    // Validate and trim inputs
+    const trimmedSecretKey = secretKey.trim();
+    const trimmedXlmAmount = xlmAmount.trim();
+    const trimmedMinUsdc = minUsdcAmount.trim();
+
+    // Validate secret key format
+    if (!trimmedSecretKey.startsWith("S") || trimmedSecretKey.length !== 56) {
+      throw new Error("Invalid secret key format");
+    }
+
+    // Create keypair from secret key
+    const sourceKeypair = Stellar.Keypair.fromSecret(trimmedSecretKey);
+    const sourcePublicKey = sourceKeypair.publicKey();
+
+    // Load source account
+    const sourceAccount = await server.loadAccount(sourcePublicKey);
+
+    // Check if account has enough XLM
+    const xlmBalance = sourceAccount.balances.find(
+      (b: any) => b.asset_type === "native"
+    );
+    const availableXLM = parseFloat(xlmBalance?.balance || "0");
+    const swapAmount = parseFloat(trimmedXlmAmount);
+    const requiredXLM = swapAmount + 0.5; // Add buffer for fees and reserves
+
+    if (availableXLM < requiredXLM) {
+      throw new Error(
+        `Insufficient XLM balance. You need at least ${requiredXLM.toFixed(2)} XLM (${trimmedXlmAmount} XLM for swap + fees). Current balance: ${availableXLM.toFixed(2)} XLM.`
+      );
+    }
+
+    // Use the hardcoded USDC asset (already defined at module level)
+    const usdcAsset = TESTNET_USDC_ASSET;
+
+    // Check if trustline exists
+    const trustlineExists = await hasTrustline(sourcePublicKey, usdcAsset);
+
+    // Build transaction
+    const BASE_FEE = "100";
+    const transactionBuilder = new Stellar.TransactionBuilder(sourceAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: networkPassphrase,
+    });
+
+    // Step 1: Add trustline if it doesn't exist
+    if (!trustlineExists) {
+      transactionBuilder.addOperation(
+        Stellar.Operation.changeTrust({
+          asset: usdcAsset,
+          limit: "922337203685.4775807", // Max limit
+        })
+      );
+    }
+
+    // Step 2: Add path payment to swap XLM for USDC
+    // This will find the best path through the DEX to convert XLM to USDC
+    transactionBuilder.addOperation(
+      Stellar.Operation.pathPaymentStrictSend({
+        sendAsset: Stellar.Asset.native(),
+        sendAmount: trimmedXlmAmount,
+        destination: sourcePublicKey, // Send to self
+        destAsset: usdcAsset,
+        destMin: trimmedMinUsdc,
+        path: [], // Empty path - let Stellar DEX find the best route (XLM -> USDC)
+      })
+    );
+
+    // Build and sign transaction
+    const transaction = transactionBuilder.setTimeout(30).build();
+    transaction.sign(sourceKeypair);
+
+    // Submit transaction
+    const result = await server.submitTransaction(transaction);
+    return result;
+  } catch (error) {
+    if (error instanceof Error) {
+      // Provide more specific error messages
+      if (error.message.includes("issuer") || error.message.includes("Issuer")) {
+        throw new Error(`Invalid USDC asset configuration: ${error.message}. Please verify the testnet USDC issuer address.`);
+      }
+      throw new Error(`Failed to get testnet USDC: ${error.message}`);
+    }
+    throw new Error(`Unknown error while getting testnet USDC: ${String(error)}`);
+  }
+}
+

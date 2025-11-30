@@ -47,14 +47,14 @@ export default function HomePage() {
     <div className="flex flex-col items-center justify-center space-y-6 p-6 h-full w-full overflow-auto bg-slate-950">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">
-          Welcome to Nova Wallet
+          Welcome to Caelus Wallet
         </h1>
         <p className="text-slate-400 text-sm">
           Your secure gateway to the Stellar network
         </p>
       </div>
 
-      <div className="w-full max-w-sm space-y-4">
+      <div className="w-full space-y-4">
         {hasVault ? (
           // Case A: Wallet exists - show login button and reset link
           <>
@@ -99,7 +99,7 @@ export default function HomePage() {
 
       <div className="mt-8 text-center">
         <p className="text-xs text-slate-500">
-          By continuing, you agree to use Nova Wallet responsibly
+          By continuing, you agree to use Caelus Wallet responsibly
         </p>
       </div>
     </div>

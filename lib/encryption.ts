@@ -124,14 +124,14 @@ export async function decryptWalletData(
  */
 export function hasEncryptedVault(): boolean {
   if (typeof window === "undefined") return false;
-  return localStorage.getItem("nova_encrypted_vault") !== null;
+  return localStorage.getItem("caelus_encrypted_vault") !== null;
 }
 
 /**
  * Store encrypted vault in localStorage
  */
 export function storeEncryptedVault(encryptedData: string): void {
-  localStorage.setItem("nova_encrypted_vault", encryptedData);
+  localStorage.setItem("caelus_encrypted_vault", encryptedData);
 }
 
 /**
@@ -139,14 +139,14 @@ export function storeEncryptedVault(encryptedData: string): void {
  */
 export function getEncryptedVault(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("nova_encrypted_vault");
+  return localStorage.getItem("caelus_encrypted_vault");
 }
 
 /**
  * Clear encrypted vault from storage
  */
 export function clearEncryptedVault(): void {
-  localStorage.removeItem("nova_encrypted_vault");
+  localStorage.removeItem("caelus_encrypted_vault");
   // Also clear old unencrypted storage
   localStorage.removeItem("stellar_publicKey");
   localStorage.removeItem("stellar_secretKey");

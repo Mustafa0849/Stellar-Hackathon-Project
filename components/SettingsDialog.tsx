@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useWalletStore } from "@/store/walletStore";
+import { getEncryptedVault, decryptWalletData } from "@/lib/encryption";
 import {
   X,
   Settings,
@@ -30,20 +31,54 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
   const [showRevealConfirmation, setShowRevealConfirmation] = useState(false);
   const [password, setPassword] = useState("");
   const [copied, setCopied] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const { secretKey } = useWalletStore();
 
   const handleRevealSecretKey = () => {
     if (!showRevealConfirmation) {
       setShowRevealConfirmation(true);
+      setPasswordError(null);
       return;
     }
 
-    // Mock validation - accept any password for MVP
-    if (password.trim() || true) {
+    // This will be handled by the async handler
+  };
+
+  const handleConfirmAndReveal = async () => {
+    if (!password.trim()) {
+      setPasswordError("Please enter your password");
+      return;
+    }
+
+    setIsVerifying(true);
+    setPasswordError(null);
+
+    try {
+      // Get encrypted vault from localStorage
+      const encryptedVault = getEncryptedVault();
+      if (!encryptedVault) {
+        setPasswordError("No encrypted wallet found");
+        setIsVerifying(false);
+        return;
+      }
+
+      // Attempt to decrypt with the provided password
+      // This will throw an error if the password is incorrect
+      await decryptWalletData(encryptedVault, password);
+
+      // If decryption succeeds, reveal the secret key
       setShowSecretKey(true);
       setShowRevealConfirmation(false);
       setPassword("");
+      setPasswordError(null);
+    } catch (err) {
+      // Decryption failed - password is incorrect
+      setPasswordError("Invalid password. Please try again.");
+      setPassword("");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -69,7 +104,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-2"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -77,24 +112,24 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
       }}
     >
       <div
-        className="bg-slate-950 rounded-2xl border border-slate-800 w-full max-w-4xl h-[90vh] flex flex-col"
+        className="bg-slate-950 rounded-2xl border border-slate-800 w-full max-w-[356px] max-h-[592px] h-full flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-800">
-          <h2 className="text-2xl font-bold text-white">Settings</h2>
+        <div className="flex items-center justify-between p-4 border-b border-slate-800 flex-shrink-0">
+          <h2 className="text-xl font-bold text-white">Settings</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Area */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Left Sidebar - Tabs */}
-          <div className="w-64 bg-slate-900 border-r border-slate-800 p-4 overflow-y-auto">
+          <div className="w-32 bg-slate-900 border-r border-slate-800 p-2 overflow-y-auto flex-shrink-0">
             <nav className="space-y-1">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -102,14 +137,15 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                    className={`w-full flex flex-col items-center space-y-1 px-2 py-2 rounded-lg transition-colors ${
                       activeTab === tab.id
                         ? "bg-slate-800 text-white"
                         : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                     }`}
+                    title={tab.label}
                   >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{tab.label}</span>
+                    <Icon className="w-4 h-4" />
+                    <span className="text-xs font-medium text-center leading-tight">{tab.label}</span>
                   </button>
                 );
               })}
@@ -117,11 +153,11 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
           </div>
 
           {/* Right Content Area */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 min-w-0">
             {/* General Tab */}
             {activeTab === "general" && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white mb-6">General</h3>
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-white mb-4">General</h3>
 
                 {/* Currency */}
                 <div>
@@ -176,13 +212,13 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
 
             {/* Security & Privacy Tab */}
             {activeTab === "security" && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white mb-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-white mb-4">
                   Security & Privacy
                 </h3>
 
                 {/* Secret Recovery Phrase - Danger Zone */}
-                <div className="border-2 border-red-600/50 bg-red-900/10 rounded-lg p-6">
+                <div className="border-2 border-red-600/50 bg-red-900/10 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-4">
                     <AlertTriangle className="w-5 h-5 text-red-400" />
                     <h4 className="text-lg font-bold text-red-400">
@@ -224,25 +260,40 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                         <input
                           type="password"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter any password (MVP)"
-                          className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            setPasswordError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !isVerifying) {
+                              handleConfirmAndReveal();
+                            }
+                          }}
+                          placeholder="Enter your wallet password"
+                          disabled={isVerifying}
+                          className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                         />
+                        {passwordError && (
+                          <p className="mt-2 text-sm text-red-400">{passwordError}</p>
+                        )}
                       </div>
 
                       <div className="flex space-x-3">
                         <button
-                          onClick={handleRevealSecretKey}
-                          className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors"
+                          onClick={handleConfirmAndReveal}
+                          disabled={isVerifying || !password.trim()}
+                          className="px-6 py-3 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                         >
-                          Confirm & Reveal
+                          {isVerifying ? "Verifying..." : "Confirm & Reveal"}
                         </button>
                         <button
                           onClick={() => {
                             setShowRevealConfirmation(false);
                             setPassword("");
+                            setPasswordError(null);
                           }}
-                          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors"
+                          disabled={isVerifying}
+                          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                         >
                           Cancel
                         </button>
@@ -296,13 +347,13 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
 
             {/* Networks Tab */}
             {activeTab === "networks" && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white mb-6">Networks</h3>
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-white mb-4">Networks</h3>
 
                 {/* Network List */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {/* Stellar Testnet - Active */}
-                  <div className="flex items-center justify-between p-4 bg-slate-800 border-2 border-green-600 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-slate-800 border-2 border-green-600 rounded-lg">
                     <div className="flex items-center space-x-3">
                       <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                       <div>
@@ -318,7 +369,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                   </div>
 
                   {/* Stellar Mainnet - Inactive */}
-                  <div className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg opacity-50">
+                  <div className="flex items-center justify-between p-3 bg-slate-800 border border-slate-700 rounded-lg opacity-50">
                     <div className="flex items-center space-x-3">
                       <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
                       <div>
@@ -335,7 +386,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                 </div>
 
                 {/* Add Custom Network */}
-                <button className="w-full px-6 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2">
+                <button className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-sm font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2">
                   <span>+</span>
                   <span>Add Custom Network</span>
                 </button>
@@ -344,21 +395,21 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
 
             {/* About Tab */}
             {activeTab === "about" && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white mb-6">About</h3>
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-white mb-4">About</h3>
 
-                <div className="space-y-4">
-                  <div className="p-6 bg-slate-800 rounded-lg border border-slate-700">
-                    <div className="text-2xl font-bold text-white mb-2">
-                      Nova Wallet
+                <div className="space-y-3">
+                  <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
+                    <div className="text-xl font-bold text-white mb-1">
+                      Caelus Wallet
                     </div>
-                    <div className="text-slate-400">Version 1.0.0</div>
+                    <div className="text-sm text-slate-400">Version 1.0.1</div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <a
                       href="#"
-                      className="block p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white transition-colors"
+                      className="block p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white text-sm transition-colors"
                       onClick={(e) => {
                         e.preventDefault();
                         alert("Support page coming soon");
@@ -368,7 +419,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                     </a>
                     <a
                       href="#"
-                      className="block p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white transition-colors"
+                      className="block p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white text-sm transition-colors"
                       onClick={(e) => {
                         e.preventDefault();
                         alert("Terms of Use page coming soon");
@@ -378,7 +429,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
                     </a>
                     <a
                       href="#"
-                      className="block p-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white transition-colors"
+                      className="block p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-white text-sm transition-colors"
                       onClick={(e) => {
                         e.preventDefault();
                         alert("Privacy Policy page coming soon");

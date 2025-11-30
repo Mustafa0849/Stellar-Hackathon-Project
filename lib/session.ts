@@ -9,14 +9,14 @@ export interface SessionData {
   activeAccountIndex: number;
 }
 
-const SESSION_KEY = "nova_session";
+const SESSION_KEY = "caelus_session";
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Check if we're in a Chrome extension context
  */
 function isChromeExtension(): boolean {
-  return typeof chrome !== "undefined" && chrome.storage && chrome.storage.session;
+  return !!(typeof chrome !== "undefined" && chrome.storage && chrome.storage.session);
 }
 
 /**
@@ -58,7 +58,7 @@ export async function getSession(): Promise<SessionData | null> {
 
     if (isChromeExtension()) {
       const result = await chrome.storage.session.get(SESSION_KEY);
-      sessionData = result[SESSION_KEY] || null;
+      sessionData = SESSION_KEY in result ? (result[SESSION_KEY] as SessionData) : null;
     } else {
       const stored = sessionStorage.getItem(SESSION_KEY);
       sessionData = stored ? JSON.parse(stored) : null;

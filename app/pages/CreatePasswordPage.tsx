@@ -103,7 +103,7 @@ export default function CreatePasswordPage() {
 
   return (
     <div className="w-full h-full bg-slate-950 p-4 overflow-auto">
-      <div className="w-full max-w-md mx-auto space-y-6">
+      <div className="w-full mx-auto space-y-4">
         <button
           onClick={() => navigate(-1)}
           className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors"
@@ -112,7 +112,7 @@ export default function CreatePasswordPage() {
           <span>Back</span>
         </button>
 
-        <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 shadow-xl">
+        <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl">
           <div className="flex items-center justify-center mb-6">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
               <Lock className="w-8 h-8 text-white" />
@@ -124,7 +124,7 @@ export default function CreatePasswordPage() {
           </h1>
           <p className="text-slate-400 mb-8 text-center">
             Create a password to protect your wallet. You&apos;ll need this password
-            to unlock your wallet each time you open Nova Wallet.
+            to unlock your wallet each time you open Caelus Wallet.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">

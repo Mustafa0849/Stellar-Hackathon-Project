@@ -54,7 +54,7 @@ This will generate the `out/` directory with all static files.
 5. The extension will appear in your extensions list
 
 ### Step 5: Test
-1. Click the Nova Wallet icon in Chrome toolbar
+1. Click the Caelus Wallet icon in Chrome toolbar
 2. The popup should open at 360×600px
 3. Test all navigation flows:
    - Landing page → Create/Import
@@ -92,7 +92,7 @@ out/
 
 ### Storage
 - Uses `localStorage` for wallet data (works in extension context)
-- Encrypted vault is stored in `localStorage` as `nova_encrypted_vault`
+- Encrypted vault is stored in `localStorage` as `caelus_encrypted_vault`
 - Read-only wallets are stored with `stellar_isReadOnly` flag
 
 ### API Calls

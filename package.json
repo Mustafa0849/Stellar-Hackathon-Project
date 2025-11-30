@@ -1,6 +1,6 @@
 {
   "name": "stellar",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -28,9 +28,11 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@types/chrome": "^0.1.31",
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@types/react-sparklines": "^1.7.5",
     "autoprefixer": "^10.4.17",
     "eslint": "^8.56.0",
     "eslint-config-next": "14.2.33",

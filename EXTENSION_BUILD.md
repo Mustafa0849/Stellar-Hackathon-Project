@@ -1,6 +1,6 @@
-# Building Nova Wallet as a Chrome Extension
+# Building Caelus Wallet as a Chrome Extension
 
-This guide explains how to build and install Nova Wallet as a Chrome browser extension.
+This guide explains how to build and install Caelus Wallet as a Chrome browser extension.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ You can use any image editor or online icon generator. For testing, you can crea
 ### 5. Test the Extension
 
 1. Click the extension icon in Chrome's toolbar
-2. The Nova Wallet popup should open (360x600px)
+2. The Caelus Wallet popup should open (360x600px)
 3. You should see the onboarding screen
 
 ## Project Structure

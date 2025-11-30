@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the implementation of multi-account management and persistent sessions for Nova Wallet.
+This document outlines the implementation of multi-account management and persistent sessions for Caelus Wallet.
 
 ## Architecture Changes
 
@@ -28,7 +28,7 @@ interface Account {
 
 ### 2. Storage Structure
 
-- **Encrypted Vault**: Stored in `localStorage` as `nova_encrypted_vault`
+- **Encrypted Vault**: Stored in `localStorage` as `caelus_encrypted_vault`
   - Contains the entire vault encrypted with user password
   - Format: `{ accounts: [...], activeAccountIndex: 0 }`
 

@@ -8,6 +8,8 @@ import {
   decryptWalletData,
   clearEncryptedVault,
   hasEncryptedVault,
+  encryptWalletData,
+  storeEncryptedVault,
 } from "@/lib/encryption";
 import { saveSession, getSession } from "@/lib/session";
 import type { Vault } from "@/lib/vault";
@@ -152,8 +154,8 @@ export default function LoginPage() {
 
   return (
     <div className="w-full h-full bg-slate-950 p-4 overflow-auto flex items-center justify-center">
-      <div className="w-full max-w-md space-y-6">
-        <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 shadow-xl">
+      <div className="w-full space-y-4">
+        <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl">
           <div className="flex items-center justify-center mb-6">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
               <Lock className="w-8 h-8 text-white" />
@@ -164,7 +166,7 @@ export default function LoginPage() {
             Welcome Back
           </h1>
           <p className="text-slate-400 mb-8 text-center">
-            Enter your password to unlock Nova Wallet
+            Enter your password to unlock Caelus Wallet
           </p>
 
           <form onSubmit={handleUnlock} className="space-y-6">

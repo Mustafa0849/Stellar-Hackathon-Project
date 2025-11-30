@@ -169,7 +169,7 @@ export default function CreateWalletPage() {
             <span>Back</span>
           </button>
 
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 shadow-xl">
+          <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl">
             <h1 className="text-3xl font-bold mb-2 text-white">Create New Wallet</h1>
             <p className="text-slate-400 mb-8">
               Save these 24 words in the exact order shown. They are the only way to recover your wallet.

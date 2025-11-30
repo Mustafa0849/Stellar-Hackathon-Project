@@ -17,7 +17,7 @@ export default function OnboardingPage() {
   return (
     <div className="flex flex-col items-center justify-center space-y-6 p-6 h-full w-full overflow-auto">
       <h1 className="text-2xl font-bold text-center mb-6">
-        Welcome to Nova Wallet
+        Welcome to Caelus Wallet
       </h1>
       
       <div className="w-full space-y-4">

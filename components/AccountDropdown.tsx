@@ -92,7 +92,7 @@ export default function AccountDropdown({
       </button>
 
       {isOpen && !isCopied && (
-        <div className="absolute top-full left-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden max-h-[400px]">
           {viewMode === "list" ? (
             <>
               {/* Account List */}

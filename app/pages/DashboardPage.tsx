@@ -89,7 +89,7 @@ export default function DashboardPage() {
   // Privacy Mode: Hide balance
   const [isBalanceHidden, setIsBalanceHidden] = useState(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("nova_balanceHidden");
+      const stored = localStorage.getItem("caelus_balanceHidden");
       return stored === "true";
     }
     return false;
@@ -149,7 +149,7 @@ export default function DashboardPage() {
             setXlmPrice(data.stellar.usd);
             // Cache price in localStorage as fallback
             if (typeof window !== "undefined") {
-              localStorage.setItem("nova_cachedXlmPrice", String(data.stellar.usd));
+              localStorage.setItem("caelus_cachedXlmPrice", String(data.stellar.usd));
             }
           }
           if (data.stellar.usd_24h_change !== undefined) {
@@ -166,7 +166,7 @@ export default function DashboardPage() {
         
         // Fallback to cached price if available
         if (typeof window !== "undefined") {
-          const cachedPrice = localStorage.getItem("nova_cachedXlmPrice");
+          const cachedPrice = localStorage.getItem("caelus_cachedXlmPrice");
           if (cachedPrice) {
             setXlmPrice(parseFloat(cachedPrice));
           }
@@ -233,7 +233,7 @@ export default function DashboardPage() {
     const newValue = !isBalanceHidden;
     setIsBalanceHidden(newValue);
     if (typeof window !== "undefined") {
-      localStorage.setItem("nova_balanceHidden", String(newValue));
+      localStorage.setItem("caelus_balanceHidden", String(newValue));
     }
   };
 
@@ -370,9 +370,9 @@ export default function DashboardPage() {
     <div className="w-full h-full bg-slate-950 overflow-auto">
       <div className="w-full">
         {/* Header Section */}
-        <div className="bg-slate-900 border-b border-slate-800 p-6">
+        <div className="bg-slate-900 border-b border-slate-800 p-4">
           {/* App Bar: Menu Icon | Account Name | Network Badge */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             {/* Left: Menu Icon with Notification Badge */}
             <button
               onClick={() => setSidebarOpen(true)}
@@ -423,7 +423,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Main Balance Header - Total Fiat Value Only */}
-          <div className="flex flex-col items-center justify-center text-center mb-6">
+          <div className="flex flex-col items-center justify-center text-center mb-4">
             {xlmPrice ? (
               <>
                 {/* Row 1: Main Balance (The Hero) */}
@@ -536,7 +536,7 @@ export default function DashboardPage() {
           )}
 
           {/* Action Bar */}
-          <div className="flex items-center justify-center space-x-8 mb-6">
+          <div className="flex items-center justify-center space-x-8 mb-4">
             <button
               onClick={() => setShowSend(true)}
               disabled={isReadOnly}
@@ -768,10 +768,10 @@ export default function DashboardPage() {
 
       {/* Receive Modal */}
       {showReceive && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Receive XLM</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 w-full max-w-[356px] max-h-[592px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Receive XLM</h2>
               <button
                 onClick={() => setShowReceive(false)}
                 className="text-slate-400 hover:text-white transition-colors"
@@ -780,9 +780,9 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="flex flex-col items-center space-y-6">
-              <div className="bg-white p-4 rounded-lg">
-                {publicKey && <QRCode value={publicKey} size={200} />}
+            <div className="flex flex-col items-center space-y-4">
+              <div className="bg-white p-3 rounded-lg">
+                {publicKey && <QRCode value={publicKey} size={180} />}
               </div>
 
               <div className="w-full">
@@ -808,10 +808,10 @@ export default function DashboardPage() {
 
       {/* Send Modal */}
       {showSend && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Send XLM</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 w-full max-w-[356px] max-h-[592px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Send XLM</h2>
               <button
                 onClick={() => {
                   setShowSend(false);
@@ -999,10 +999,10 @@ export default function DashboardPage() {
 
       {/* Notifications Modal */}
       {showNotifications && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Notifications</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 w-full max-w-[356px] max-h-[592px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Notifications</h2>
               <button
                 onClick={() => setShowNotifications(false)}
                 className="text-slate-400 hover:text-white transition-colors"
@@ -1056,10 +1056,10 @@ export default function DashboardPage() {
 
       {/* Security & Privacy Modal (Secret Key) */}
       {showSecretKeyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 w-full max-w-[356px] max-h-[592px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">
                 Security & Privacy
               </h2>
               <button
@@ -1318,10 +1318,10 @@ export default function DashboardPage() {
 
       {/* Get Testnet USDC Modal */}
       {showGetUSDC && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-md w-full">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Get Testnet USDC</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 w-full max-w-[356px] max-h-[592px] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Get Testnet USDC</h2>
               <button
                 onClick={() => {
                   setShowGetUSDC(false);

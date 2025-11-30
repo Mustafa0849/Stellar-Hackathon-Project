@@ -9,6 +9,8 @@ import {
   clearEncryptedVault,
   hasEncryptedVault,
 } from "@/lib/encryption";
+import { saveSession, getSession } from "@/lib/session";
+import type { Vault } from "@/lib/vault";
 import { Lock, Eye, EyeOff, AlertTriangle } from "lucide-react";
 
 export default function LoginPage() {
@@ -22,15 +24,43 @@ export default function LoginPage() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
 
-  // Redirect if no encrypted vault exists
+  // Check for existing session or redirect if no vault
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    const checkSession = async () => {
+      if (typeof window === "undefined") return;
+
       if (!hasEncryptedVault()) {
         navigate("/");
-      } else {
-        setIsChecking(false);
+        return;
       }
-    }
+
+      // Check for existing session (auto-login)
+      const session = await getSession();
+      if (session) {
+        try {
+          const encryptedVault = getEncryptedVault();
+          if (encryptedVault) {
+            const decryptedData = await decryptWalletData(encryptedVault, session.password);
+            const vault: Vault = JSON.parse(decryptedData);
+            
+            // Restore vault to store
+            const { setVault } = useWalletStore.getState();
+            setVault(vault);
+            
+            // Redirect to dashboard
+            navigate("/dashboard");
+            return;
+          }
+        } catch (err) {
+          console.error("Session restore failed:", err);
+          // Continue to login screen
+        }
+      }
+
+      setIsChecking(false);
+    };
+
+    checkSession();
   }, [navigate]);
 
   // Don't render if no vault exists (redirect will happen)
@@ -57,17 +87,39 @@ export default function LoginPage() {
         return;
       }
 
-      // Decrypt wallet data
+      // Decrypt vault data
       const decryptedData = await decryptWalletData(encryptedVault, password);
-      const walletData = JSON.parse(decryptedData);
+      let vault: Vault = JSON.parse(decryptedData);
 
-      // Restore wallet to store
-      setWallet(
-        walletData.publicKey,
-        walletData.secretKey,
-        walletData.mnemonic || undefined,
-        false // Not read-only (encrypted wallet has secret key)
-      );
+      // Handle migration from old single-account format
+      if (!vault.accounts || !Array.isArray(vault.accounts)) {
+        // Legacy format - migrate to vault
+        const { createEmptyVault, addAccountToVault } = await import("@/lib/vault");
+        const migratedVault = addAccountToVault(
+          createEmptyVault(),
+          {
+            name: "Account 1",
+            publicKey: (vault as any).publicKey || (vault as any).walletData?.publicKey,
+            secretKey: (vault as any).secretKey || (vault as any).walletData?.secretKey,
+            mnemonic: (vault as any).mnemonic || (vault as any).walletData?.mnemonic,
+            isReadOnly: false,
+          }
+        );
+        
+        // Re-encrypt with new format
+        const vaultData = JSON.stringify(migratedVault);
+        const encryptedData = await encryptWalletData(vaultData, password);
+        storeEncryptedVault(encryptedData);
+        
+        vault = migratedVault;
+      }
+
+      // Restore vault to store
+      const { setVault } = useWalletStore.getState();
+      setVault(vault);
+
+      // Save session for auto-login
+      await saveSession(password, vault.activeAccountIndex);
 
       // Clear password from memory
       setPassword("");

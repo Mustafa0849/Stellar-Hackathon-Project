@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from "@/store/walletStore";
 import { encryptWalletData, storeEncryptedVault } from "@/lib/encryption";
+import { saveSession } from "@/lib/session";
+import { createEmptyVault, addAccountToVault } from "@/lib/vault";
 import { ArrowLeft, Eye, EyeOff, Lock } from "lucide-react";
 
 export default function CreatePasswordPage() {
@@ -47,23 +49,40 @@ export default function CreatePasswordPage() {
     setIsLoading(true);
 
     try {
-      // Prepare wallet data for encryption
-      const walletData = JSON.stringify({
-        publicKey,
-        secretKey,
-        mnemonic: mnemonic || null,
-      });
+      // Create vault structure with the current account
+      const vault = addAccountToVault(
+        createEmptyVault(),
+        {
+          name: "Account 1",
+          publicKey: publicKey!,
+          secretKey: secretKey!,
+          mnemonic: mnemonic || undefined,
+          isReadOnly: false,
+        }
+      );
 
-      // Encrypt and store
-      const encryptedData = await encryptWalletData(walletData, password);
+      // Encrypt vault and store
+      const vaultData = JSON.stringify(vault);
+      const encryptedData = await encryptWalletData(vaultData, password);
       storeEncryptedVault(encryptedData);
 
-      // Keep wallet in store (user is already authenticated)
-      // Only clear unencrypted localStorage data, not the store
+      // Save session for auto-login
+      await saveSession(password, vault.activeAccountIndex);
+
+      // Set vault in store
+      const { setVault } = useWalletStore.getState();
+      setVault(vault);
+
+      // Clear password from memory
+      setPassword("");
+      setConfirmPassword("");
+
+      // Clear unencrypted localStorage data
       if (typeof window !== "undefined") {
         localStorage.removeItem("stellar_publicKey");
         localStorage.removeItem("stellar_secretKey");
         localStorage.removeItem("stellar_mnemonic");
+        localStorage.removeItem("stellar_isReadOnly");
       }
 
       // Redirect directly to dashboard (user is already logged in)

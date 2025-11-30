@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { generateMnemonic, getKeypairFromMnemonic } from "@/lib/stellar";
 import { useWalletStore } from "@/store/walletStore";
+import { hasEncryptedVault, getEncryptedVault, decryptWalletData, encryptWalletData, storeEncryptedVault } from "@/lib/encryption";
+import { getSession } from "@/lib/session";
+import { addAccountToVault, type Vault } from "@/lib/vault";
 import { ArrowLeft, Copy, Check, ArrowRight } from "lucide-react";
 
 type Phase = "display" | "verify";
@@ -78,7 +81,7 @@ export default function CreateWalletPage() {
     setVerificationError(null); // Clear error when user types
   };
 
-  const handleVerifyAndCreate = () => {
+  const handleVerifyAndCreate = async () => {
     if (!mnemonic || mnemonicWords.length === 0) return;
 
     // Validate all 3 words are entered
@@ -104,11 +107,48 @@ export default function CreateWalletPage() {
       return;
     }
 
-    // Verification passed - create wallet and redirect
+    // Verification passed - create wallet
     try {
       const { publicKey, secretKey } = getKeypairFromMnemonic(mnemonic);
+      
+      // Check if vault exists (user is adding account to existing vault)
+      const session = await getSession();
+      if (session && hasEncryptedVault()) {
+        try {
+          const encryptedVault = getEncryptedVault();
+          if (encryptedVault) {
+            const decryptedData = await decryptWalletData(encryptedVault, session.password);
+            const vault: Vault = JSON.parse(decryptedData);
+            
+            // Add new account to vault
+            const accountNumber = vault.accounts.length + 1;
+            const updatedVault = addAccountToVault(vault, {
+              name: `Account ${accountNumber}`,
+              publicKey,
+              secretKey,
+              mnemonic,
+              isReadOnly: false,
+            });
+            
+            // Re-encrypt and save vault
+            const vaultData = JSON.stringify(updatedVault);
+            const encryptedData = await encryptWalletData(vaultData, session.password);
+            storeEncryptedVault(encryptedData);
+            
+            // Update store and redirect to dashboard
+            const { setVault } = useWalletStore.getState();
+            setVault(updatedVault);
+            navigate("/dashboard");
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to add account to vault:", err);
+          // Fall through to password creation flow
+        }
+      }
+      
+      // First account or no session - use legacy flow
       setWallet(publicKey, secretKey, mnemonic, false);
-      // Redirect to create password page instead of dashboard
       navigate("/create-password");
     } catch (error) {
       console.error("Failed to create wallet:", error);

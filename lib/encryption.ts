@@ -151,5 +151,6 @@ export function clearEncryptedVault(): void {
   localStorage.removeItem("stellar_publicKey");
   localStorage.removeItem("stellar_secretKey");
   localStorage.removeItem("stellar_mnemonic");
+  localStorage.removeItem("stellar_isReadOnly");
 }
 

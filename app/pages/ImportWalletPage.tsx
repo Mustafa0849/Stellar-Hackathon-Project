@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { importWallet, getKeypairFromMnemonic } from "@/lib/stellar";
 import { useWalletStore } from "@/store/walletStore";
+import { hasEncryptedVault, getEncryptedVault, decryptWalletData, encryptWalletData, storeEncryptedVault } from "@/lib/encryption";
+import { getSession } from "@/lib/session";
+import { addAccountToVault, type Vault } from "@/lib/vault";
 import { ArrowLeft, Eye, EyeOff, Key, FileText } from "lucide-react";
 
 type ImportMode = "mnemonic" | "privateKey";
@@ -28,6 +31,10 @@ export default function ImportWalletPage() {
     setError(null);
 
     try {
+      let publicKey: string;
+      let secretKey: string | null;
+      let mnemonic: string | undefined;
+
       if (mode === "mnemonic") {
         // Import from mnemonic (12 or 24 words)
         const trimmedInput = input.trim();
@@ -39,8 +46,10 @@ export default function ImportWalletPage() {
         }
         
         // Import from mnemonic
-        const { publicKey, secretKey } = getKeypairFromMnemonic(trimmedInput);
-        setWallet(publicKey, secretKey, trimmedInput, false);
+        const keypair = getKeypairFromMnemonic(trimmedInput);
+        publicKey = keypair.publicKey;
+        secretKey = keypair.secretKey;
+        mnemonic = trimmedInput;
       } else {
         // Import from private key (Secret Key)
         const trimmedInput = input.trim();
@@ -52,8 +61,52 @@ export default function ImportWalletPage() {
         
         // Import from secret key
         const wallet = importWallet(trimmedInput);
-        setWallet(wallet.publicKey, wallet.secretKey, undefined, false);
+        publicKey = wallet.publicKey;
+        secretKey = wallet.secretKey;
+        mnemonic = undefined;
       }
+      
+      // Check if vault exists (user is adding account to existing vault)
+      const session = await getSession();
+      if (session && hasEncryptedVault()) {
+        try {
+          const encryptedVault = getEncryptedVault();
+          if (encryptedVault) {
+            const decryptedData = await decryptWalletData(encryptedVault, session.password);
+            const vault: Vault = JSON.parse(decryptedData);
+            
+            // Add new account to vault
+            const accountNumber = vault.accounts.length + 1;
+            const updatedVault = addAccountToVault(vault, {
+              name: `Account ${accountNumber}`,
+              publicKey,
+              secretKey,
+              mnemonic,
+              isReadOnly: false,
+            });
+            
+            // Re-encrypt and save vault
+            const vaultData = JSON.stringify(updatedVault);
+            const encryptedData = await encryptWalletData(vaultData, session.password);
+            storeEncryptedVault(encryptedData);
+            
+            // Update store and redirect to dashboard
+            const { setVault } = useWalletStore.getState();
+            setVault(updatedVault);
+            
+            // Clear input for security
+            setInput("");
+            navigate("/dashboard");
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to add account to vault:", err);
+          // Fall through to password creation flow
+        }
+      }
+      
+      // First account or no session - use legacy flow
+      setWallet(publicKey, secretKey, mnemonic, false);
       
       // Clear input for security
       setInput("");

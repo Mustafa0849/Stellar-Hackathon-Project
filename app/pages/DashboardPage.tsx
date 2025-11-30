@@ -5,8 +5,11 @@ import { useNavigate } from 'react-router-dom';
 import { useWalletStore } from "@/store/walletStore";
 import { sendPayment, fetchRecentTransactions, type TransactionHistoryItem } from "@/lib/stellar";
 import { hasEncryptedVault, clearEncryptedVault } from "@/lib/encryption";
+import { clearSession } from "@/lib/session";
 import QRCode from "react-qr-code";
 import SettingsDialog from "@/components/SettingsDialog";
+import AccountDropdown from "@/components/AccountDropdown";
+import { Sparklines, SparklinesLine } from "react-sparklines";
 import {
   Copy,
   Check,
@@ -31,6 +34,8 @@ import {
   Lock,
   CheckCircle2,
   ArrowRight,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 
 type Tab = "assets" | "activity";
@@ -47,6 +52,8 @@ export default function DashboardPage() {
     isReadOnly,
     fetchAccountData,
     setError,
+    vault,
+    switchAccount,
   } = useWalletStore();
 
   const [activeTab, setActiveTab] = useState<Tab>("assets");
@@ -61,6 +68,9 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [xlmPrice, setXlmPrice] = useState<number | null>(null);
+  const [xlm24hChange, setXlm24hChange] = useState<number | null>(null);
+  const [sparklineData, setSparklineData] = useState<number[]>([]);
+  const [priceError, setPriceError] = useState<string | null>(null);
   const [showSecretKey, setShowSecretKey] = useState(false);
   const [showSecretKeyModal, setShowSecretKeyModal] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
@@ -71,6 +81,16 @@ export default function DashboardPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(4); // WhatsApp-style notification count
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isAccountCopied, setIsAccountCopied] = useState(false);
+  
+  // Privacy Mode: Hide balance
+  const [isBalanceHidden, setIsBalanceHidden] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("nova_balanceHidden");
+      return stored === "true";
+    }
+    return false;
+  });
 
   // Simple session check - redirect if no public key
   useEffect(() => {
@@ -104,21 +124,50 @@ export default function DashboardPage() {
     }
   }, [publicKey, navigate, fetchAccountData, isLoading]);
 
-  // Fetch XLM price from CoinGecko
+  // Fetch XLM price and 24h change from CoinGecko
   useEffect(() => {
     const fetchXlmPrice = async () => {
       try {
+        setPriceError(null);
         const response = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd"
+          "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd&include_24hr_change=true&include_sparkline=true"
         );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
-        if (data.stellar && data.stellar.usd) {
-          setXlmPrice(data.stellar.usd);
+        if (data.stellar) {
+          if (data.stellar.usd) {
+            setXlmPrice(data.stellar.usd);
+            // Cache price in localStorage as fallback
+            if (typeof window !== "undefined") {
+              localStorage.setItem("nova_cachedXlmPrice", String(data.stellar.usd));
+            }
+          }
+          if (data.stellar.usd_24h_change !== undefined) {
+            setXlm24hChange(data.stellar.usd_24h_change);
+          }
+          // Store sparkline data (7-day price history)
+          if (data.stellar.sparkline_7d && Array.isArray(data.stellar.sparkline_7d.price)) {
+            setSparklineData(data.stellar.sparkline_7d.price);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch XLM price:", error);
+        setPriceError("Unable to fetch live price");
+        
+        // Fallback to cached price if available
+        if (typeof window !== "undefined") {
+          const cachedPrice = localStorage.getItem("nova_cachedXlmPrice");
+          if (cachedPrice) {
+            setXlmPrice(parseFloat(cachedPrice));
+          }
+        }
       }
     };
+    
     fetchXlmPrice();
     // Refresh price every 5 minutes
     const interval = setInterval(fetchXlmPrice, 5 * 60 * 1000);
@@ -161,9 +210,11 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLockWallet = () => {
+  const handleLockWallet = async () => {
     const { clearWallet } = useWalletStore.getState();
     clearWallet();
+    // Clear session for security
+    await clearSession();
     // Redirect to landing page (encrypted vault still exists)
     navigate("/");
   };
@@ -174,9 +225,12 @@ export default function DashboardPage() {
     setSidebarOpen(false);
   };
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     // Clear encrypted vault
     clearEncryptedVault();
+    
+    // Clear session
+    await clearSession();
     
     // Clear wallet store
     const { clearWallet } = useWalletStore.getState();
@@ -187,6 +241,27 @@ export default function DashboardPage() {
     
     // Redirect to landing page
     navigate("/");
+  };
+
+  const toggleBalanceVisibility = () => {
+    const newValue = !isBalanceHidden;
+    setIsBalanceHidden(newValue);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("nova_balanceHidden", String(newValue));
+    }
+  };
+
+  const handleCopyAccount = async () => {
+    if (!publicKey) return;
+    try {
+      await navigator.clipboard.writeText(publicKey);
+      setIsAccountCopied(true);
+      setTimeout(() => {
+        setIsAccountCopied(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to copy account:", err);
+    }
   };
 
   const truncateAddress = (address: string) => {
@@ -292,8 +367,30 @@ export default function DashboardPage() {
               )}
             </button>
 
-            {/* Center: Account Name */}
-            <h1 className="text-xl font-semibold text-white">Account 1</h1>
+            {/* Center: Account Name (Dropdown) */}
+            {vault && vault.accounts.length > 0 ? (
+              <AccountDropdown
+                vault={vault}
+                onSwitchAccount={switchAccount}
+                onCopyAddress={handleCopyAccount}
+                isCopied={isAccountCopied}
+              />
+            ) : (
+              <button
+                onClick={handleCopyAccount}
+                className="flex items-center justify-center space-x-2 px-2 py-1 rounded-lg hover:opacity-80 transition-opacity cursor-pointer"
+                title="Click to copy address"
+              >
+                <h1 className="text-xl font-semibold text-white">
+                  {isAccountCopied ? "Address Copied!" : "Account 1"}
+                </h1>
+                {isAccountCopied ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+            )}
 
             {/* Right: Network Badge */}
             <div className="flex items-center space-x-2 px-3 py-1 bg-green-900/30 border border-green-700 rounded-full">
@@ -304,22 +401,106 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Main Balance */}
-          <div className="text-center mb-6">
-            <div className="text-5xl font-bold text-white mb-2">
-              {totalXLM.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 7,
-              })}
-            </div>
-            <div className="text-slate-400 text-lg mb-1">XLM</div>
-            {xlmPrice && (
-              <div className="text-slate-500 text-sm">
-                ≈ ${(totalXLM * xlmPrice).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{" "}
-                USD
+          {/* Main Balance Header - Total Fiat Value Only */}
+          <div className="flex flex-col items-center justify-center text-center mb-6">
+            {xlmPrice ? (
+              <>
+                {/* Row 1: Main Balance (The Hero) */}
+                <div className="flex items-center justify-center space-x-3 mb-2">
+                  <div className="text-4xl font-bold text-white">
+                    {isBalanceHidden ? (
+                      "$****"
+                    ) : (
+                      `$${(totalXLM * xlmPrice).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`
+                    )}
+                  </div>
+                  <button
+                    onClick={toggleBalanceVisibility}
+                    className="p-2 text-slate-400 hover:text-white transition-colors"
+                    title={isBalanceHidden ? "Show balance" : "Hide balance"}
+                  >
+                    {isBalanceHidden ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Row 2: Performance Indicator (24h Change + Sparkline) */}
+                {!isBalanceHidden && (
+                  <div className="flex flex-row items-center justify-center gap-2 mt-1">
+                    {/* 24h Percentage */}
+                    <div className="flex items-center space-x-1.5">
+                      {xlm24hChange !== null ? (
+                        <>
+                          {xlm24hChange > 0 ? (
+                            <TrendingUp className="w-4 h-4 text-green-400" />
+                          ) : xlm24hChange < 0 ? (
+                            <TrendingDown className="w-4 h-4 text-red-400" />
+                          ) : null}
+                          <span
+                            className={`text-sm font-medium ${
+                              xlm24hChange > 0
+                                ? "text-green-400"
+                                : xlm24hChange < 0
+                                ? "text-red-400"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {xlm24hChange > 0 ? "+" : ""}
+                            {xlm24hChange.toFixed(2)}%
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-medium text-slate-400">0.00%</span>
+                      )}
+                    </div>
+
+                    {/* Sparkline Graph */}
+                    {sparklineData.length > 0 && (
+                      <div className="flex items-center w-24">
+                        <Sparklines
+                          data={sparklineData}
+                          width={100}
+                          height={30}
+                          margin={2}
+                        >
+                          <SparklinesLine
+                            color={
+                              xlm24hChange !== null
+                                ? xlm24hChange > 0
+                                  ? "#4ade80"
+                                  : xlm24hChange < 0
+                                  ? "#f87171"
+                                  : "#94a3b8"
+                                : "#94a3b8"
+                            }
+                            style={{ strokeWidth: 2 }}
+                          />
+                        </Sparklines>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isBalanceHidden && (
+                  <div className="flex flex-row items-center justify-center gap-2 mt-1">
+                    <span className="text-sm font-medium text-slate-500">****%</span>
+                    <div className="w-24 h-[30px] bg-slate-800 rounded blur-sm"></div>
+                  </div>
+                )}
+                {priceError && (
+                  <div className="text-xs text-amber-400 mt-1" title={priceError}>
+                    ⚠️ Using cached price
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-4xl font-bold text-white mb-2">
+                {isBalanceHidden ? "$****" : "Loading..."}
               </div>
             )}
           </div>
@@ -368,26 +549,6 @@ export default function DashboardPage() {
               <span className="text-sm text-slate-300">Add Asset</span>
             </button>
           </div>
-
-          {/* Address Pill */}
-          <div className="flex items-center justify-center relative">
-            <button
-              onClick={handleCopyPublicKey}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-full text-sm text-slate-300 font-mono transition-colors flex items-center space-x-2"
-            >
-              <span>{truncateAddress(publicKey)}</span>
-              {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
-            {addressCopied && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-3 py-1 rounded-lg shadow-lg whitespace-nowrap">
-                Copied!
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Tabbed Interface */}
@@ -428,7 +589,17 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="text-white font-semibold">XLM</div>
-                      <div className="text-xs text-slate-400">Stellar Lumens</div>
+                      <div className="text-xs text-slate-400">
+                        Stellar Lumens
+                        {xlmPrice && (
+                          <span className="ml-1">
+                            • 1 XLM ≈ ${xlmPrice.toLocaleString(undefined, {
+                              minimumFractionDigits: 4,
+                              maximumFractionDigits: 6,
+                            })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -1171,3 +1342,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

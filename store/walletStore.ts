@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { loadAccountDetails } from "@/lib/stellar";
 import type { Account } from "stellar-sdk";
+import type { Vault, Account as VaultAccount } from "@/lib/vault";
+import { addAccountToVault, getActiveAccount } from "@/lib/vault";
 
 /**
  * Balance type from Stellar account
@@ -19,6 +21,7 @@ export interface Balance {
  * Wallet Store State
  */
 interface WalletState {
+  // Current active account (for backward compatibility)
   publicKey: string | null;
   secretKey: string | null;
   mnemonic: string | null;
@@ -28,12 +31,17 @@ interface WalletState {
   availableXLM: number;
   isLoading: boolean;
   error: string | null;
+  
+  // Multi-account support
+  vault: Vault | null;
+  activeAccountIndex: number;
 }
 
 /**
  * Wallet Store Actions
  */
 interface WalletActions {
+  // Legacy methods (for backward compatibility)
   setWallet: (publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly?: boolean) => void;
   clearWallet: () => void;
   setAccount: (publicKey: string, balances: Balance[]) => void;
@@ -41,6 +49,13 @@ interface WalletActions {
   fetchAccountData: (publicKey: string) => Promise<void>;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  // New multi-account methods
+  setVault: (vault: Vault) => void;
+  loadActiveAccount: () => void;
+  switchAccount: (index: number) => void;
+  createAccount: (name: string, publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly?: boolean) => void;
+  addAccount: (account: Omit<VaultAccount, "index">) => void;
 }
 
 type WalletStore = WalletState & WalletActions;
@@ -99,7 +114,7 @@ function calculateAvailableXLM(account: Account): number {
 /**
  * Zustand Store for Wallet State Management
  */
-export const useWalletStore = create<WalletStore>((set) => ({
+export const useWalletStore = create<WalletStore>((set, get) => ({
   // Initial State
   publicKey: null,
   secretKey: null,
@@ -110,6 +125,10 @@ export const useWalletStore = create<WalletStore>((set) => ({
   availableXLM: 0,
   isLoading: false,
   error: null,
+  
+  // Multi-account support
+  vault: null,
+  activeAccountIndex: 0,
 
   // Actions
   setWallet: (publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly: boolean = false) => {
@@ -235,6 +254,67 @@ export const useWalletStore = create<WalletStore>((set) => ({
 
   setError: (error: string | null) => {
     set({ error });
+  },
+
+  // Multi-account methods
+  setVault: (vault: Vault) => {
+    set({ vault, activeAccountIndex: vault.activeAccountIndex });
+    get().loadActiveAccount();
+  },
+
+  loadActiveAccount: () => {
+    const { vault } = get();
+    if (!vault || vault.accounts.length === 0) return;
+
+    const activeAccount = vault.accounts.find(
+      (acc) => acc.index === vault.activeAccountIndex
+    ) || vault.accounts[0];
+
+    if (activeAccount) {
+      set({
+        publicKey: activeAccount.publicKey,
+        secretKey: activeAccount.secretKey,
+        mnemonic: activeAccount.mnemonic || null,
+        isReadOnly: activeAccount.isReadOnly || false,
+        isConnected: true,
+      });
+    }
+  },
+
+  switchAccount: (index: number) => {
+    const { vault } = get();
+    if (!vault) return;
+
+    const account = vault.accounts.find((acc) => acc.index === index);
+    if (!account) return;
+
+    const updatedVault: Vault = {
+      ...vault,
+      activeAccountIndex: index,
+    };
+
+    set({ vault: updatedVault, activeAccountIndex: index });
+    get().loadActiveAccount();
+  },
+
+  createAccount: (name: string, publicKey: string, secretKey: string | null, mnemonic?: string, isReadOnly: boolean = false) => {
+    const { vault } = get();
+    
+    const newVault = vault 
+      ? addAccountToVault(vault, { name, publicKey, secretKey, mnemonic, isReadOnly })
+      : addAccountToVault({ accounts: [], activeAccountIndex: 0 }, { name, publicKey, secretKey, mnemonic, isReadOnly });
+
+    get().setVault(newVault);
+  },
+
+  addAccount: (account: Omit<VaultAccount, "index">) => {
+    const { vault } = get();
+    
+    const newVault = vault 
+      ? addAccountToVault(vault, account)
+      : addAccountToVault({ accounts: [], activeAccountIndex: 0 }, account);
+
+    get().setVault(newVault);
   },
 }));
 
